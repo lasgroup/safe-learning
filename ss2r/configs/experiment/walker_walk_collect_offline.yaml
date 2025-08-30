@@ -1,0 +1,12 @@
+# @package _global_
+defaults:
+  - walker_walk_simple
+  - override /environment: walker
+
+training:
+  num_timesteps: 20000000
+  # Use high safety budget so that the policy is unsafe
+  safety_budget: 100000
+
+agent:
+  store_buffer: true

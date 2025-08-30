@@ -1,0 +1,41 @@
+# @package _global_
+defaults:
+  - override /environment: cartpole_swingup
+  - override /agent: mbpo
+  - _self_
+
+training:
+  num_timesteps: 1000000
+  safe: false
+  num_envs: 128
+  num_eval_envs: 128
+  num_eval_episodes: 1
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  wandb_id: n9jdpg48  # y5z7b4bq
+  render: false
+
+environment:
+  task_params:
+    episode_length: 1000
+    ctrl_dt: 0.04
+    vision: true
+    vision_config:
+      render_batch_size: 128
+      render_width: 64
+      render_height: 64
+      use_rasterizer: false
+      gpu_id: 0
+      enabled_geom_groups: [0, 1, 2] 
+      history: 3
+
+agent:
+  min_replay_size: 5000
+  max_replay_size: 100000
+  sac_batch_size: 512
+  policy_hidden_layer_sizes: [256, 256, 256]
+  critic_grad_updates_per_step: 32
+  model_grad_updates_per_step: 25
+  use_vision: true
+  normalize_observations: false
+  load_normalizer: false

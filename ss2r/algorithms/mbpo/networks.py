@@ -103,8 +103,9 @@ def make_world_model_ensemble(
         if isinstance(obs, dict):
             next_next_obs = {
                 "state": diff_obs_raw + obs_state,
-                "cumulative_cost": obs["cumulative_cost"],
             }
+            if "cumulative_cost" in obs:
+                next_next_obs["cumulative_cost"] = obs["cumulative_cost"]
         else:
             next_next_obs = diff_obs_raw + obs_state
         obs = postprocess_observations_fn(next_next_obs, preprocessor_params)

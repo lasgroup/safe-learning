@@ -75,6 +75,7 @@ class Policy(tf.keras.Model):
         self.mlp = MLP(  # Assuming your previously defined MLP class is available
             layer_sizes=list(hidden_layer_sizes) + [action_size * 2],
             activation=activation,
+            deterministic=False,
         )
         self.submodules = [self.encoder, self.encoder_dense, self.mlp]
 
@@ -83,6 +84,13 @@ class Policy(tf.keras.Model):
         hidden = self.encoder_dense(hidden)
         hidden = self.encoder_norm(hidden)
         hidden = self.tanh(hidden)
+        additional_obs = []
+        for k, x in obs.items():
+            if not k.startswith("pixels/"):
+                additional_obs.append(x)
+        if additional_obs:
+            additional_obs = tf.concat(additional_obs, axis=-1)
+            hidden = tf.concat([hidden, additional_obs], axis=-1)
         return self.mlp(hidden)
 
 
@@ -194,7 +202,10 @@ def convert_policy_to_onnx(make_inference_fn, params, cfg, act_size, obs_size):
         encoder_hidden_dim=cfg.agent.encoder_hidden_dim,
         tanh=cfg.agent.tanh,
     )
-    obs = {"pixels/view_0": np.ones((1,) + obs_size, dtype=np.float32)}
+    obs = {
+        "pixels/view_0": np.ones((1,) + obs_size, dtype=np.float32),
+        "state": np.ones((1, 10), dtype=np.float32),
+    }
     tf_policy_network(obs).numpy()[0]
     # Transfer JAX weights to TF model
     transfer_weights(params[1]["params"], tf_policy_network)
@@ -207,7 +218,8 @@ def convert_policy_to_onnx(make_inference_fn, params, cfg, act_size, obs_size):
             {
                 "pixels/view_0": tf.TensorSpec(
                     [1, *obs_size], tf.float32, name="pixels/view_0"
-                )
+                ),
+                "state": tf.TensorSpec([1, 10], tf.float32, name="state"),
             }
         ],
         opset=11,
@@ -221,7 +233,7 @@ def convert_policy_to_onnx(make_inference_fn, params, cfg, act_size, obs_size):
 
 def make_franka_policy(make_policy_fn, params, cfg):
     tf.keras.backend.clear_session()
-    proto_model = convert_policy_to_onnx(make_policy_fn, params, cfg, 3, (64, 64, 3))
+    proto_model = convert_policy_to_onnx(make_policy_fn, params, cfg, 3, (64, 64, 1))
     return proto_model.SerializeToString()
 
 

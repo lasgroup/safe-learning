@@ -1,0 +1,12 @@
+# @package _global_
+defaults:
+  - cartpole_swingup_vision_mbpo_sooper
+  - _self_
+
+
+agent:
+  learning_rate: 3e-4
+  critic_learning_rate: 3e-4
+  safety_filter: null
+  optimism: 0.
+  pessimism: 0.

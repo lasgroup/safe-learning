@@ -33,7 +33,6 @@ class Encoder(linen.Module):
                     padding=self.padding,
                 )(x)
                 x = jnn.relu(x)
-
             if len(x.shape) == 4:
                 x = x.reshape([x.shape[0], -1])
             else:
@@ -61,6 +60,13 @@ def make_policy_vision_network(
             hidden = linen.LayerNorm()(hidden)
             if tanh:
                 hidden = jnn.tanh(hidden)
+            additional_obs = []
+            for k, x in obs.items():
+                if not k.startswith("pixels/"):
+                    additional_obs.append(x)
+            if additional_obs:
+                additional_obs = jnp.concatenate(additional_obs, axis=-1)
+                hidden = jnp.concatenate([hidden, additional_obs], axis=-1)
             outs = networks.MLP(
                 layer_sizes=list(hidden_layer_sizes) + [output_size],
                 activation=activation,
@@ -111,6 +117,13 @@ def make_q_vision_network(
             if tanh:
                 hidden = jnn.tanh(hidden)
             hidden = jnp.concatenate([hidden, actions], axis=-1)
+            additional_obs = []
+            for k, x in obs.items():
+                if not k.startswith("pixels/"):
+                    additional_obs.append(x)
+            if additional_obs:
+                additional_obs = jnp.concatenate(additional_obs, axis=-1)
+                hidden = jnp.concatenate([hidden, additional_obs], axis=-1)
             res = []
             net = BroNet if use_bro else MLP
             for _ in range(self.n_critics):

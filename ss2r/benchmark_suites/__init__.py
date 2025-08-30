@@ -15,6 +15,9 @@ from ss2r.benchmark_suites.brax.ant import ant
 from ss2r.benchmark_suites.brax.cartpole import cartpole
 from ss2r.benchmark_suites.brax.humanoid import humanoid
 from ss2r.benchmark_suites.mujoco_playground.cartpole import cartpole as dm_cartpole
+from ss2r.benchmark_suites.mujoco_playground.cartpole.spidr_cartpole import (
+    VisionSPiDRCartpole,
+)
 from ss2r.benchmark_suites.mujoco_playground.go1_joystick import go1_joystick
 from ss2r.benchmark_suites.mujoco_playground.go2_joystick import (
     getup,
@@ -131,33 +134,35 @@ def get_wrap_env_fn(cfg):
 
         return saute_train, saute_eval
 
-    # TODO (manu): use another flag than safe because we
-    # might implement other baselines for safety
-    if cfg.agent.name == "mbpo" and cfg.training.safe:
+    if cfg.agent.name == "mbpo":
 
         def safe_mbpo_train(env):
             env = out[0](env)
-            env = TrackOnlineCostsInObservation(env)
+            use_safety_filter = (
+                cfg.training.safe and cfg.agent.safety_filter is not None
+            )
+            if "use_vision" in cfg.agent and cfg.agent.use_vision:
+                env = VisionWrapper(
+                    env, cfg.training.wandb_id, cfg.wandb.entity, use_safety_filter
+                )
+            if use_safety_filter:
+                env = TrackOnlineCostsInObservation(env)
             return env
 
         def safe_mbpo_eval(env):
             env = out[1](env)
-            env = TrackOnlineCostsInObservation(env)
+            use_safety_filter = (
+                cfg.training.safe and cfg.agent.safety_filter is not None
+            )
+            if "use_vision" in cfg.agent and cfg.agent.use_vision:
+                env = VisionWrapper(
+                    env, cfg.training.wandb_id, cfg.wandb.entity, use_safety_filter
+                )
+            if use_safety_filter:
+                env = TrackOnlineCostsInObservation(env)
             return env
 
         return safe_mbpo_train, safe_mbpo_eval
-    if cfg.agent.name == "mbpo" and "use_vision" in cfg.agent and cfg.agent.use_vision:
-
-        def mbpo_vision_train(env):
-            if cfg.training.safe:
-                env = TrackOnlineCostsInObservation(env)
-            env = VisionWrapper(env)
-
-        def mbpo_vision_test(env):
-            if cfg.training.safe:
-                env = TrackOnlineCostsInObservation(env)
-            env = VisionWrapper(env)
-
     return out
 
 
@@ -171,6 +176,8 @@ def make(cfg, train_wrap_env_fn=lambda env: env, eval_wrap_env_fn=lambda env: en
         return make_mujoco_playground_envs(cfg, train_wrap_env_fn, eval_wrap_env_fn)
     elif domain_name == "safety_gym":
         return make_safety_gym_envs(cfg, train_wrap_env_fn, eval_wrap_env_fn)
+    elif domain_name == "cartpole_spidr_vision":
+        return make_spidr_cartpole_vision(cfg, train_wrap_env_fn, eval_wrap_env_fn)
 
 
 def prepare_randomization_fn(key, num_envs, cfg, task_name):
@@ -304,6 +311,53 @@ def _preinitialize_vision_env(task_name, task_params, registry):
     train_env = registry.load(task_name, config=new_params)
     dummy_state = train_env.reset(jax.random.PRNGKey(0))
     train_env.step(dummy_state, jnp.zeros(train_env.action_size))
+
+
+def make_spidr_cartpole_vision(cfg, train_wrap_env_fn, eval_wrap_env_fn):
+    from ml_collections import config_dict
+    from mujoco_playground import registry
+
+    from ss2r.benchmark_suites.mujoco_playground import wrap_for_brax_training
+
+    task_cfg = get_task_config(cfg)
+    task_params = config_dict.ConfigDict(task_cfg.task_params)
+    _preinitialize_vision_env(task_cfg.task_name, task_params, registry)
+    train_key, spidr_key = jax.random.split(jax.random.PRNGKey(cfg.training.seed))
+    spidr_train_randomization_fn = prepare_randomization_fn(
+        spidr_key,
+        8,
+        task_cfg.train_params,
+        task_cfg.task_name,
+    )
+    train_env = registry.load(task_cfg.task_name, config=task_params)
+    train_env = VisionSPiDRCartpole(
+        train_env, spidr_train_randomization_fn, cfg.agent.lambda_, config=task_params
+    )
+    train_randomization_fn = (
+        prepare_randomization_fn(
+            train_key,
+            cfg.training.num_envs,
+            task_cfg.train_params,
+            task_cfg.task_name,
+        )
+        if cfg.training.train_domain_randomization
+        else None
+    )
+    if cfg.training.safe:
+        limit = task_params.slider_position_bound
+        train_env = dm_cartpole.ConstraintWrapper(train_env, limit)
+    randomization_fn = lambda model: train_randomization_fn(model)[:2]
+    train_env = wrap_for_brax_training(
+        train_env,
+        randomization_fn=randomization_fn,
+        episode_length=cfg.training.episode_length,
+        action_repeat=cfg.training.action_repeat,
+        augment_state=False,
+        hard_resets=cfg.training.hard_resets,
+        vision=True,
+        num_vision_envs=cfg.training.num_envs,
+    )
+    return train_env, train_env
 
 
 def make_mujoco_playground_envs(cfg, train_wrap_env_fn, eval_wrap_env_fn):

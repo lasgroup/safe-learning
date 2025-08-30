@@ -207,6 +207,8 @@ def train(
     offline: bool = False,
     learn_from_scratch: bool = False,
     load_auxiliaries: bool = False,
+    load_normalizer: bool = True,
+    target_entropy: float | None = None,
 ):
     if min_replay_size >= num_timesteps:
         raise ValueError(
@@ -218,7 +220,7 @@ def train(
         budget_scaling_fn = (
             lambda x: x * episode_length * (1.0 - safety_discounting) / action_repeat
         )
-    logging.info(f"Episode safety budget: {safety_budget}")
+    logging.info(f"Episode safety budget: {budget_scaling_fn(safety_budget)}")
     if max_replay_size is None:
         max_replay_size = num_timesteps
     # The number of environment steps executed for every `actor_step()` call.
@@ -286,11 +288,14 @@ def train(
     }
     if safe:
         extras["state_extras"]["cost"] = jnp.zeros(())  # type: ignore
+    if safety_filter is not None:
         extras["policy_extras"] = {
             "intervention": jnp.zeros(()),
             "policy_distance": jnp.zeros(()),
+            "safety_gap": jnp.zeros(()),
             "cumulative_cost": jnp.zeros(()),
             "expected_total_cost": jnp.zeros(()),
+            "q_c": jnp.zeros(()),
         }
 
     dummy_transition = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
@@ -335,16 +340,20 @@ def train(
     if restore_checkpoint_path is not None:
         params = checkpoint.load(restore_checkpoint_path)
         ts_normalizer_params = training_state.normalizer_params
-        if isinstance(ts_normalizer_params.mean, dict) and not isinstance(
-            params[0].mean, dict
-        ):
-            ts_normalizer_params = get_dict_normalizer_params(
-                params, ts_normalizer_params
-            )
-        else:
-            ts_normalizer_params = params[0]
+        if load_normalizer:
+            if isinstance(ts_normalizer_params.mean, dict) and not isinstance(
+                params[0].mean, dict
+            ):
+                ts_normalizer_params = get_dict_normalizer_params(
+                    params, ts_normalizer_params
+                )
+            else:
+                ts_normalizer_params = params[0]
         if offline:
             model_buffer_state = replay_buffers.ReplayBufferState(**params[-1])
+            training_state = training_state.replace(  # type: ignore
+                normalizer_params=ts_normalizer_params
+            )
         elif learn_from_scratch:
             training_state = training_state.replace(  # type: ignore
                 normalizer_params=ts_normalizer_params,
@@ -368,20 +377,27 @@ def train(
             )
         if load_auxiliaries:
             policy_optimizer_state = restore_state(
-                params[6][1]["inner_state"],
+                params[6][1]["inner_state"]
+                if isinstance(params[6][1], dict)
+                else params[6],
                 training_state.behavior_policy_optimizer_state,
             )
             alpha_optimizer_state = restore_state(
                 params[7], training_state.alpha_optimizer_state
             )
             qr_optimizer_state = restore_state(
-                params[8][1]["inner_state"], training_state.behavior_qr_optimizer_state
+                params[8][1]["inner_state"]
+                if isinstance(params[8][1], dict)
+                else params[8],
+                training_state.behavior_qr_optimizer_state,
             )
             if not safe:
                 qc_optimizer_state = None
             else:
                 qc_optimizer_state = restore_state(
-                    params[9][1]["inner_state"],
+                    params[9][1]["inner_state"]
+                    if isinstance(params[9][1], dict)
+                    else params[9],
                     training_state.backup_qc_optimizer_state,
                 )
             training_state = training_state.replace(  # type: ignore
@@ -409,6 +425,7 @@ def train(
         action_size=action_size,
         use_bro=use_bro,
         normalize_fn=normalize_fn,
+        target_entropy=target_entropy,
     )
     alpha_update = (
         gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
@@ -626,7 +643,11 @@ def train(
 
     if not eval_env:
         eval_env = environment
-    Evaluator = InterventionConstraintsEvaluator if safe else ConstraintsEvaluator
+    Evaluator = (
+        InterventionConstraintsEvaluator
+        if safety_filter is not None
+        else ConstraintsEvaluator
+    )
     evaluator = Evaluator(
         eval_env,
         functools.partial(make_rollout_policy, deterministic=deterministic_eval),

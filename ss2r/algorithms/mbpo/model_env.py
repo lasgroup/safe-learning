@@ -150,7 +150,8 @@ class ModelBasedEnv(envs.Env):
                 """Reset the state if done."""
                 key, reset_keys = jax.random.split(state.info["key"])
                 state.info["key"] = key
-                next_obs["cumulative_cost"] = state.obs["cumulative_cost"] + cost
+                if self.safety_filter == "sooper":
+                    next_obs["cumulative_cost"] = state.obs["cumulative_cost"] + cost
                 reset_state_obs = self.reset(reset_keys).obs
                 obs = jax.tree_map(
                     lambda x, y: jnp.where(done, x, y), reset_state_obs, next_obs

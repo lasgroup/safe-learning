@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Any, Dict, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -74,26 +74,29 @@ def make_training_step(
             params=training_state.behavior_qr_params,
         )
         if safe:
-            (
-                backup_cost_critic_loss,
-                backup_qc_params,
-                backup_qc_optimizer_state,
-            ) = cost_critic_update(
-                training_state.backup_qc_params,
-                training_state.backup_policy_params,
-                training_state.normalizer_params,
-                training_state.backup_target_qc_params,
-                alpha,
-                transitions,
-                key_critic,
-                cost_q_transform,
-                True,
-                optimizer_state=training_state.backup_qc_optimizer_state,
-                params=training_state.backup_qc_params,
-            )
-            cost_metrics = {
-                "backup_cost_critic_loss": backup_cost_critic_loss,
-            }
+            cost_metrics = {}
+            if safety_filter is not None:
+                (
+                    backup_cost_critic_loss,
+                    backup_qc_params,
+                    backup_qc_optimizer_state,
+                ) = cost_critic_update(
+                    training_state.backup_qc_params,
+                    training_state.backup_policy_params,
+                    training_state.normalizer_params,
+                    training_state.backup_target_qc_params,
+                    alpha,
+                    transitions,
+                    key_critic,
+                    cost_q_transform,
+                    True,
+                    optimizer_state=training_state.backup_qc_optimizer_state,
+                    params=training_state.backup_qc_params,
+                )
+                cost_metrics["backup_cost_critic_loss"] = backup_cost_critic_loss
+            else:
+                backup_qc_params = training_state.backup_qc_params
+                backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
             if penalizer is not None:
                 (
                     behavior_cost_critic_loss,
@@ -287,7 +290,7 @@ def make_training_step(
     def relabel_transitions(
         planning_env: ModelBasedEnv,
         transitions: Transition,
-    ) -> Transition:
+    ) -> Tuple[Transition, Dict[str, Any]]:
         pred_fn = planning_env.model_network.apply
         model_params = planning_env.model_params
         normalizer_params = planning_env.normalizer_params
@@ -308,6 +311,7 @@ def make_training_step(
         )
         new_reward = reward.mean(0) + disagreement * optimism
         discount = transitions.discount
+        metrics = {"disagreement": disagreement}
         if safe:
             cost = cost.mean(0) + disagreement * pessimism
             transitions.extras["state_extras"]["cost"] = cost
@@ -328,7 +332,17 @@ def make_training_step(
                         jnp.zeros_like(cost, dtype=jnp.float32),
                         jnp.ones_like(cost, dtype=jnp.float32),
                     )
-                elif safety_filter == "advantage":
+                    pred_qr = planning_env.qr_network.apply
+                    backup_qr_params = planning_env.backup_qr_params
+                    pessimistic_qr_pred = pred_qr(
+                        normalizer_params,
+                        backup_qr_params,
+                        transitions.observation,
+                        backup_action,
+                    ).mean(axis=-1)
+                    new_reward = jnp.where(discount, new_reward, pessimistic_qr_pred)
+                    metrics["pessimistic_qr_pred"] = pessimistic_qr_pred
+                elif safety_filter in ["advantage", "advantage_g2g_reset"]:
                     qc_backup = planning_env.qc_network.apply(
                         normalizer_params,
                         planning_env.backup_qc_params,
@@ -347,22 +361,9 @@ def make_training_step(
                         jnp.zeros_like(cost, dtype=jnp.float32),
                         jnp.ones_like(cost, dtype=jnp.float32),
                     )
-
-            pred_qr = planning_env.qr_network.apply
-            backup_qr_params = planning_env.backup_qr_params
-            pessimistic_qr_pred = pred_qr(
-                normalizer_params,
-                backup_qr_params,
-                transitions.observation,
-                backup_action,
-            ).mean(axis=-1)
-            new_reward = jnp.where(
-                discount,
-                new_reward,
-                pessimistic_qr_pred
-                if safety_filter == "sooper"
-                else jnp.zeros_like(transitions.reward),
-            )
+                    new_reward = jnp.where(
+                        discount, new_reward, jnp.zeros_like(new_reward)
+                    )
         next_obs_pred = jax.tree_map(lambda x: x.mean(0), next_obs_pred)
         return Transition(
             observation=transitions.observation,
@@ -371,7 +372,7 @@ def make_training_step(
             reward=new_reward,
             discount=discount,
             extras=transitions.extras,
-        ), disagreement
+        ), metrics
 
     def training_step(
         training_state: TrainingState,
@@ -435,7 +436,7 @@ def make_training_step(
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),
             transitions,
         )
-        transitions, disagreement = relabel_transitions(planning_env, transitions)
+        transitions, more_metrics = relabel_transitions(planning_env, transitions)
         (training_state, _), critic_metrics = jax.lax.scan(
             critic_sgd_step, (training_state, training_key), transitions
         )
@@ -455,7 +456,7 @@ def make_training_step(
         metrics = {**model_metrics, **critic_metrics, **actor_metrics}
         metrics["buffer_current_size"] = model_replay_buffer.size(model_buffer_state)
         metrics |= env_state.metrics
-        metrics["disagreement"] = disagreement
+        metrics |= more_metrics
         return training_state, env_state, model_buffer_state, metrics
 
     return training_step

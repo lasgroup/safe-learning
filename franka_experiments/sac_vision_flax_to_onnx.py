@@ -1,5 +1,4 @@
-import pickle
-
+import jax
 import jax.nn as jnn
 from brax.training.acme import running_statistics
 from hydra import compose, initialize
@@ -25,11 +24,11 @@ def test_policy_to_onnx_export():
     # Define dummy config
     cfg = get_cfg()
     act_size = 3
-    obs_shape = (64, 64, 3)  # shape for each image input
+    obs_shape = (64, 64, 1)  # shape for each image input
     # Dummy observation with a single pixel input
     activation = getattr(jnn, cfg.agent.activation)
     sac_network = make_sac_vision_networks(
-        observation_size={"pixels/view_0": obs_shape},
+        observation_size={"pixels/view_0": obs_shape, "state": (3,)},
         action_size=act_size,
         policy_hidden_layer_sizes=cfg.agent.policy_hidden_layer_sizes,
         encoder_hidden_dim=cfg.agent.encoder_hidden_dim,
@@ -37,9 +36,8 @@ def test_policy_to_onnx_export():
         tanh=cfg.agent.tanh,
         preprocess_observations_fn=running_statistics.normalize,
     )
+    params = sac_network.policy_network.init(jax.random.PRNGKey(0))
     make_inference_fn = sac_networks.make_inference_fn(sac_network)
-    with open("params.pkl", "rb") as f:
-        params = pickle.load(f)[1]
     franka_sac_to_onnx.make_franka_policy(make_inference_fn, (None, params), cfg)
 
 

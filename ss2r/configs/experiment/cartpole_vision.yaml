@@ -16,6 +16,7 @@ environment:
 training:
   num_timesteps: 1000000
   safe: false
+  safety_budget: 100
   train_domain_randomization: false
   eval_domain_randomization: false
   num_eval_episodes: 1
@@ -23,3 +24,6 @@ training:
 
 agent:
   activation: swish
+  batch_size: 256
+  grad_updates_per_step: 32
+  min_replay_size: 8192

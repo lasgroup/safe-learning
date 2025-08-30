@@ -53,17 +53,10 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
             policy_hidden_layer_sizes=policy_hidden_layer_sizes,
             value_hidden_layer_sizes=value_hidden_layer_sizes,
             activation=activation,
-            encoder_hidden_dim=agent_cfg["encoder_hidden_dim"],
-            tanh=agent_cfg["tanh"],
-            # TODO (yarden): currently only use latents.
-            # Make sure to disable normalizing the latents.
-            use_latents=True,
+            encoder_hidden_dim=50,
+            tanh=True,
         )
-        del (
-            agent_cfg["use_vision"],
-            agent_cfg["encoder_hidden_dim"],
-            agent_cfg["tanh"],
-        )
+        del agent_cfg["use_vision"]
     else:
         value_obs_key = "privileged_state" if cfg.training.value_privileged else "state"
         policy_obs_key = (

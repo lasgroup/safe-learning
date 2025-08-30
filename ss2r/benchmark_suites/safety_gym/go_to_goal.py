@@ -27,7 +27,6 @@ _ROBOT_TO_SENSOR_TO_COMPONENTS = {
     },
 }
 _EXTENTS = (-2.0, -2.0, 2.0, 2.0)
-_GOAL_SIZE = 0.3
 
 _ROBOT_ID = 1
 
@@ -128,6 +127,7 @@ def get_collision_info(
 def build_arena(
     spec: mj.MjSpec,
     layout: dict[str, list[tuple[int, jax.Array]]],
+    goal_size: float,
     visualize: bool = False,
 ):
     """Build the arena (currently, just adds Lidar rings). Future: dynamically add obstacles, hazards, objects, goal here"""
@@ -165,12 +165,12 @@ def build_arena(
             conaffinity=jp.zeros(()),
         )
     goal_pos = layout["goal"][0][1]
-    xyz = jp.hstack([goal_pos, _GOAL_SIZE / 2.0 + 1e-2])
+    xyz = jp.hstack([goal_pos, goal_size / 2.0 + 1e-2])
     goal = spec.worldbody.add_body(name="goal", mocap=True, pos=xyz)
     goal.add_geom(
         name="goal",
         type=mj.mjtGeom.mjGEOM_CYLINDER,
-        size=[_GOAL_SIZE, _GOAL_SIZE / 2.0, 0],
+        size=[goal_size, goal_size / 2.0, 0],
         rgba=[0, 1, 0, 0.25],
         contype=jp.zeros(()),
         conaffinity=jp.zeros(()),
@@ -194,16 +194,20 @@ class GoToGoal(mjx_env.MjxEnv):
         seed: int = 0,
         num_hazards: int = 10,
         num_vases: int = 10,
+        goal_size: float = 0.3,
     ):
+        self.goal_size = goal_size
         self.spec = {
             "robot": ObjectSpec(0.4, 1),
-            "goal": ObjectSpec(_GOAL_SIZE + 0.05, 1),
+            "goal": ObjectSpec(goal_size + 0.05, 1),
             "hazards": ObjectSpec(0.18, num_hazards),
             "vases": ObjectSpec(0.15, num_vases),
         }
         mj_spec: mj.MjSpec = mj.MjSpec.from_file(filename=str(_XML_PATH), assets={})
         layout = _sample_layout(jax.random.PRNGKey(seed), self.spec)
-        build_arena(mj_spec, layout=layout, visualize=visualize_lidar)
+        build_arena(
+            mj_spec, layout=layout, visualize=visualize_lidar, goal_size=goal_size
+        )
         self._mj_model = mj_spec.compile()
         self._mjx_model = mjx.put_model(self._mj_model)
         self._post_init()
@@ -352,7 +356,7 @@ class GoToGoal(mjx_env.MjxEnv):
             _, positions = zip(*data)
             if name == "goal":
                 assert len(positions) == 1
-                xyz = jp.hstack([positions[0], _GOAL_SIZE / 2.0 + 1e-2])
+                xyz = jp.hstack([positions[0], self.goal_size / 2.0 + 1e-2])
                 new_mocap_pos = new_mocap_pos.at[self._goal_mocap_id].set(xyz)
             elif name == "hazards":
                 for xy, id_ in zip(positions, self._hazard_mocap_id):
@@ -404,7 +408,7 @@ class GoToGoal(mjx_env.MjxEnv):
         data = mjx_env.step(self._mjx_model, state.data, action, n_substeps=2)
         reward, goal_dist = self.get_reward(data, state.info["last_goal_dist"])
         # Reset goal if robot inside goal
-        condition = goal_dist <= _GOAL_SIZE + 1e-2
+        condition = goal_dist <= self.goal_size + 1e-2
         data, rng, goal_dist = jax.lax.cond(
             condition,
             self._resample_goal,

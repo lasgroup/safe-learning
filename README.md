@@ -6,8 +6,8 @@
 </p>
 
 
-# Safe Sim2Real
-A collection of algorithms and experiment tools for safe sim to real transfer in robotics.
+# Safe Learning on Real Robots
+A collection of algorithms and experiment tools for safe sim to real transfer and learning in robotics.
 
 ## Features
 * Three different CMDP solvers, [CRPO](https://arxiv.org/abs/2011.05869), [Saute-RL](https://arxiv.org/abs/2202.06558) and primal-dual, compatible with (variants of) [Brax's](https://github.com/google/brax) SAC, MBPO and PPO.

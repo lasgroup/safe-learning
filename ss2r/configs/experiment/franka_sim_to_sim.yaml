@@ -1,32 +1,9 @@
 # @package _global_
 defaults:
-  - franka_sim_to_real
+  - franka_online
   - override /agent/data_collection: episodic
-  - override /agent/replay_buffer: rae
   - _self_
 
-training:
-  num_timesteps: 100000
-  wandb_id: eclz7est
-  num_envs: 2
-  num_eval_envs: 2
-  num_evals: 100
 
 environment:
-  task_params:
-    action_history_length: 1
-    vision_config:
-      render_batch_size: 2
-    use_ball: true
-    box_init_range: 0.
-    obs_noise:
-      brightness: [1., 1.]
-
-agent:
-  min_replay_size: 400
-  replay_buffer:
-    wandb_ids:
-      - eclz7est
-    mix: [1., 0., 10000]
-  grad_updates_per_step: 50
-  target_entropy: null
+  task_name: PandaPickCubeCartesian

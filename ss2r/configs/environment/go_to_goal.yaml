@@ -7,6 +7,7 @@ task_params:
   visualize_lidar: False 
   num_hazards: 10
   num_vases: 10
+  goal_size: 0.3
 
 train_params:
   damping:

@@ -1,0 +1,44 @@
+# @package _global_
+defaults:
+  - override /environment: go_to_goal
+  - override /agent: mbpo
+  - override /agent/data_collection: episodic
+  - override /agent/cost_robustness: pessimistic_cost_update
+  - override /agent/penalizer: lagrangian
+  - _self_
+
+training:
+  num_timesteps: 750000
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  safe: true
+  safety_budget: 25
+  action_repeat: 4
+  num_envs: 1
+  num_evals: 20
+  wandb_id: 2k0olihe # atpwmr5r
+
+
+agent:
+  activation: swish
+  policy_hidden_layer_sizes: [256, 256, 256]
+  value_hidden_layer_sizes: [512, 512]
+  model_hidden_layer_sizes: [400, 400, 400, 400]
+  batch_size: 256
+  min_replay_size: 6000
+  max_replay_size: 1048576
+  critic_grad_updates_per_step: 1500
+  model_grad_updates_per_step: 110000
+  num_critic_updates_per_actor_update: 3
+  num_model_rollouts: 110000
+  learning_rate: 1e-5
+  critic_learning_rate: 1e-7
+  model_learning_rate: 5e-4
+  pessimism: 0
+  optimism: 0
+  safety_discounting: 0.99
+  load_auxiliaries: true
+  cost_robustness: null
+  use_termination: false
+  safety_filter: null
+  cost_scaling: 50

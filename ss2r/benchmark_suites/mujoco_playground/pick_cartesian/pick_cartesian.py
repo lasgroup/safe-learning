@@ -34,6 +34,16 @@ from mujoco_playground._src.manipulation.franka_emika_panda import (
 )
 
 
+def _rgba_to_grayscale(rgba: jax.Array) -> jax.Array:
+    """
+    Intensity-weigh the colors.
+    This expects the input to have the channels in the last dim.
+    """
+    r, g, b = rgba[..., 0], rgba[..., 1], rgba[..., 2]
+    gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
+    return gray
+
+
 def domain_randomize(
     mjx_model: mjx.Model, num_worlds: int
 ) -> Tuple[mjx.Model, mjx.Model]:
@@ -41,7 +51,7 @@ def domain_randomize(
     mj_model = pick_cartesian.PandaPickCubeCartesian().mj_model
     floor_geom_id = mj_model.geom("floor").id
     box_geom_id = mj_model.geom("box").id
-    strip_geom_id = mj_model.geom("init_space").id
+    # strip_geom_id = mj_model.geom("init_space").id
 
     in_axes = jax.tree_util.tree_map(lambda x: None, mjx_model)
     in_axes = in_axes.tree_replace(
@@ -79,10 +89,10 @@ def domain_randomize(
         # geom_rgba = mjx_model.geom_rgba.at[box_geom_id].set(rgba)
         geom_rgba = mjx_model.geom_rgba.copy()
 
-        strip_white = jax.random.uniform(key_strip, (), minval=0.8, maxval=1.0)
-        geom_rgba = geom_rgba.at[strip_geom_id].set(
-            jp.array([strip_white, strip_white, strip_white, 1.0])
-        )  # type: ignore
+        # strip_white = jax.random.uniform(key_strip, (), minval=0.8, maxval=1.0)
+        # geom_rgba = geom_rgba.at[strip_geom_id].set(
+        #     jp.array([strip_white, strip_white, strip_white, 1.0])
+        # )  # type: ignore
 
         # Sample a shade of gray
         gray_scale = jax.random.uniform(key_floor, (), minval=0.0, maxval=0.25)
@@ -100,7 +110,7 @@ def domain_randomize(
             -1
         )  # Use the above randomized colors
         geom_matid = geom_matid.at[floor_geom_id].set(-2)
-        geom_matid = geom_matid.at[strip_geom_id].set(-2)
+        # geom_matid = geom_matid.at[strip_geom_id].set(-2)
 
         #### Cameras ####
         key_pos, key_ori, key = jax.random.split(key, 3)
@@ -412,9 +422,14 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
             render_token, rgb, _ = self.renderer.init(data, self._mjx_model)
             info.update({"render_token": render_token})
 
-            obs = jp.asarray(rgb[0][..., :3], dtype=jp.float32) / 255.0
-            obs = adjust_brightness(obs, brightness)
-            obs = {"pixels/view_0": obs}
+            obs = _rgba_to_grayscale(jp.asarray(rgb[0], dtype=jp.float32)) / 255.0
+            obs = adjust_brightness(obs, brightness)[..., None]
+            gripper_pos = data.site_xpos[self._gripper_site]
+            fingers = data.qpos[7:9] / 0.04
+            proprioceptive = jp.concatenate(
+                [gripper_pos, fingers, info["action_history"].copy()]
+            )
+            obs = {"pixels/view_0": obs, "state": proprioceptive}
 
         return mjx_env.State(data, obs, reward, done, metrics, info)
 
@@ -539,9 +554,14 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
         obs = jp.concat([obs, no_soln.reshape(1), action], axis=0)
         if self._vision:
             _, rgb, _ = self.renderer.render(state.info["render_token"], data)
-            obs = jp.asarray(rgb[0][..., :3], dtype=jp.float32) / 255.0
-            obs = adjust_brightness(obs, state.info["brightness"])
-            obs = {"pixels/view_0": obs}
+            obs = _rgba_to_grayscale(jp.asarray(rgb[0], dtype=jp.float32)) / 255.0
+            obs = adjust_brightness(obs, state.info["brightness"])[..., None]
+            gripper_pos = data.site_xpos[self._gripper_site]
+            fingers = data.qpos[7:9] / 0.04
+            proprioceptive = jp.concatenate(
+                [gripper_pos, fingers, action_history.copy()]
+            )
+            obs = {"pixels/view_0": obs, "state": proprioceptive}
 
         return state.replace(
             data=data,

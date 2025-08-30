@@ -1,0 +1,54 @@
+# @package _global_
+defaults:
+  - override /environment: cartpole_swingup
+  - override /agent: mbpo
+  - override /agent/data_collection: episodic
+  - override /agent/cost_robustness: pessimistic_cost_update
+  - _self_
+
+training:
+  num_timesteps: 500000
+  safe: true
+  num_envs: 10
+  num_eval_envs: 10
+  num_eval_episodes: 1
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  wandb_id: r4sai9ui
+  render: false
+
+environment:
+  task_params:
+    episode_length: 1000
+    ctrl_dt: 0.04
+    vision: true
+    vision_config:
+      render_batch_size: 10
+      render_width: 64
+      render_height: 64
+      use_rasterizer: false
+      gpu_id: 0
+      enabled_geom_groups: [0, 1, 2] 
+      history: 3
+
+agent:
+  min_replay_size: 5000
+  max_replay_size: 1048576
+  sac_batch_size: 512
+  policy_hidden_layer_sizes: [256, 256, 256]
+  critic_grad_updates_per_step: 1000
+  model_grad_updates_per_step: 80000
+  num_model_rollouts: 100000
+  learning_rate: 1e-5
+  critic_learning_rate: 1e-5
+  model_learning_rate: 3e-4
+  use_vision: true
+  normalize_observations: false
+  load_normalizer: false
+  pessimism: 0.
+  optimism: 0.
+  advantage_threshold: 0.2
+  safety_filter: sooper
+  reset_on_eval: true
+  load_auxiliaries: true
+  cost_scaling: 50.

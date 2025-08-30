@@ -1,0 +1,37 @@
+# @package _global_
+defaults:
+  - mujoco_playground_dm_control
+  - override /environment: go_to_goal
+  - override /agent/cost_robustness: ucb_cost
+  - override /agent/propagation: spidr
+  - override /agent/penalizer: lagrangian
+  - _self_
+
+training:
+  num_timesteps: 5000000
+  train_domain_randomization: true
+  eval_domain_randomization: false
+  safe: true
+  safety_budget: 25
+  action_repeat: 4
+
+train_params:
+  damping:
+    x: [.9, 1.1]
+    y: [.9, 1.1]
+    z: [.9, 1.1]
+  gear:
+    x: [-0.2, 0.2]
+    z: [-0.1, 0.1]
+  mass: [1., 1.]
+
+agent:
+  activation: swish
+  safety_discounting: 0.99
+  penalizer:
+    lagrange_multiplier: 5.
+    penalty_multiplier: 2.
+    penalty_multiplier_factor: 0.25
+  propagation:
+    num_envs: 8
+    lambda_: 0.175

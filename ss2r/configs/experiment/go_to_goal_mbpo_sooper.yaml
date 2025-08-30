@@ -1,0 +1,38 @@
+# @package _global_
+defaults:
+  - override /environment: go_to_goal
+  - override /agent: mbpo
+  - override /agent/data_collection: episodic
+  - override /agent/cost_robustness: pessimistic_cost_update
+  - _self_
+
+training:
+  num_timesteps: 750000
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  safe: true
+  safety_budget: 25
+  action_repeat: 4
+  num_envs: 1
+  num_evals: 25
+  wandb_id: 2k0olihe
+
+agent:
+  activation: swish
+  policy_hidden_layer_sizes: [256, 256, 256]
+  value_hidden_layer_sizes: [512, 512]
+  model_hidden_layer_sizes: [400, 400, 400, 400]
+  batch_size: 256
+  min_replay_size: 5000
+  max_replay_size: 1048576
+  critic_grad_updates_per_step: 2000
+  model_grad_updates_per_step: 140000
+  num_model_rollouts: 100000
+  learning_rate: 3e-6
+  critic_learning_rate: 1e-6
+  model_learning_rate: 1e-4
+  pessimism: 12
+  optimism: 0.1
+  safety_discounting: 0.99
+  safety_filter: sooper
+  load_auxiliaries: true

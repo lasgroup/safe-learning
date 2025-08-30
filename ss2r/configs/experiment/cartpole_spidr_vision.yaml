@@ -1,0 +1,41 @@
+# @package _global_
+defaults:
+  - mujoco_playground_dm_control_vision
+  - override /environment: cartpole_swingup
+  - override /agent/cost_robustness: ucb_cost
+  - _self_
+
+
+training:
+  safe: true
+  safety_budget: 100
+  num_timesteps: 1000000
+  train_domain_randomization: true
+  eval_domain_randomization: true
+  num_eval_episodes: 1
+  episode_length: 1000
+
+environment:
+  domain_name: cartpole_spidr_vision
+  task_params:
+    ctrl_dt: 0.04
+    episode_length: 1000
+    vision_config:
+      enabled_geom_groups: [0, 1, 2]
+      history: 3
+  train_params:
+    pole_length: [0., 0.]
+    pole_mass: [0., 0.]
+    gear: [0., 5.]
+
+  eval_params:
+    pole_length: [-0.25, 0.25]
+    pole_mass: [0., 0.]
+    gear: [0., 5.]
+
+agent:
+  activation: swish
+  batch_size: 256
+  grad_updates_per_step: 32
+  lambda_: 500
+  min_replay_size: 8192

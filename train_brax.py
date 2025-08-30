@@ -130,7 +130,7 @@ def main(cfg):
                 policy_params = params[:2]
             else:
                 policy_params = params
-            if cfg.agent.name == "mbpo" and cfg.training.safe:
+            if cfg.agent.name == "mbpo" and cfg.agent.safety_filter is not None:
                 policy_params = (
                     params[0],
                     (

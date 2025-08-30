@@ -23,6 +23,7 @@ class MLP(tf.keras.Model):
         bias=True,
         layer_norm=False,
         mean_std=None,
+        deterministic=True,
     ):
         super().__init__()
 
@@ -32,6 +33,7 @@ class MLP(tf.keras.Model):
         self.activate_final = activate_final
         self.bias = bias
         self.layer_norm = layer_norm
+        self.deterministic = deterministic
 
         if mean_std is not None:
             self.mean = tf.Variable(mean_std[0], trainable=False, dtype=tf.float32)
@@ -67,8 +69,12 @@ class MLP(tf.keras.Model):
         if self.mean is not None and self.std is not None:
             inputs = (inputs - self.mean) / self.std
         logits = self.mlp_block(inputs)
-        loc, _ = tf.split(logits, 2, axis=-1)
-        return tf.tanh(loc)
+        loc, std = tf.split(logits, 2, axis=-1)
+        if self.deterministic:
+            return tf.tanh(loc)
+        std = tf.math.softplus(std) + 0.001
+        sample = tf.random.normal(tf.shape(loc)) * std + loc
+        return tf.tanh(sample)
 
 
 def make_policy_network(

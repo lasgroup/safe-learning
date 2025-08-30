@@ -20,6 +20,8 @@ environment:
     success_threshold: 0.03
     vision_config:
       render_batch_size: 512
+      render_width: 64
+      render_height: 64
 
 agent:
   batch_size: 128
@@ -32,3 +34,4 @@ agent:
   reward_scaling: 10.
   n_critics: 1
   n_heads: 10
+  normalize_observations: false

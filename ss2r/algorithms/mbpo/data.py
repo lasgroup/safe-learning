@@ -29,6 +29,10 @@ def safe_actor_step(
         nstate.info["expected_total_cost"] = policy_extras.get(
             "expected_total_cost", jnp.zeros_like(nstate.reward)
         )
+        nstate.info["cumulative_cost"] = policy_extras.get(
+            "cumulative_cost", jnp.zeros_like(nstate.reward)
+        )
+        nstate.info["q_c"] = policy_extras.get("q_c", jnp.zeros_like(nstate.reward))
     return nstate, Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
         observation=env_state.obs,
         action=actions,

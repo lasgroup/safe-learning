@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 from brax.envs import State, Wrapper
 from brax.training.agents.sac import checkpoint
+from flax import linen
 
 from ss2r.algorithms.sac.vision_networks import Encoder
 from ss2r.common.wandb import get_wandb_checkpoint
@@ -57,12 +58,33 @@ class TrackOnlineCostsInObservation(Wrapper):
 
 
 class VisionWrapper(Wrapper):
-    def __init__(self, env, wandb_id, wandb_entity):
+    def __init__(self, env, wandb_id, wandb_entity, cumulative_cost):
         super().__init__(env)
+        # Madrona backend calls unwrapped function and therefore
+        # never reaches the correct observation size.
+        from mujoco_playground._src import mjx_env
+
+        old_prop = mjx_env.MjxEnv.observation_size
+        if cumulative_cost:
+            get_fn = lambda self: {
+                "state": 50,
+                "cumulative_cost": 1,
+            }
+        else:
+            get_fn = lambda self: 50
+        mjx_env.MjxEnv.observation_size = property(
+            fget=get_fn,
+            fset=old_prop.fset,
+            fdel=old_prop.fdel,
+        )
         checkpoint_path = get_wandb_checkpoint(wandb_id, wandb_entity)
         params = checkpoint.load(checkpoint_path)
         self.frozen_encoder_params = {"params": params[3]["params"]["SharedEncoder"]}
+        self.frozen_dense_params = {"params": params[1]["params"]["Dense_0"]}
+        self.frozen_layer_norm_params = {"params": params[1]["params"]["LayerNorm_0"]}
         self.encoder = Encoder()
+        self.dense = linen.Dense(50)
+        self.layer_norm = linen.LayerNorm()
 
     def reset(self, rng):
         state = super().reset(rng)
@@ -74,5 +96,8 @@ class VisionWrapper(Wrapper):
 
     def _handle_state(self, state):
         assert isinstance(state.obs, Mapping)
-        state.obs["latents"] = self.encoder.apply(self.frozen_encoder_params, state.obs)
+        latents = self.encoder.apply(self.frozen_encoder_params, state.obs)
+        latents = self.dense.apply(self.frozen_dense_params, latents)
+        latents = self.layer_norm.apply(self.frozen_layer_norm_params, latents)
+        state = state.replace(obs=latents)
         return state

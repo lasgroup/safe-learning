@@ -2,7 +2,7 @@
 defaults:
   - override /environment: rccar_real
   - override /agent: mbpo
-  - override /agent/penalizer: crpo
+  - override /agent/penalizer: lagrangian
   - _self_
 
 environment:
@@ -38,6 +38,10 @@ agent:
   pessimism: 30
   # Use negative optimism so that the reward is pessimistic w.r.t uncertianty
   # following MOPO paper.
-  optimism: -10
+  optimism: 0.
   safety_filter: null
   offline: true
+  penalizer:
+    lagrange_multiplier: 0.1
+    penalty_multiplier: 0.001
+    penalty_multiplier_factor: 1e-4

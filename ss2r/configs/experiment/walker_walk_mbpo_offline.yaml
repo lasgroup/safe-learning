@@ -1,0 +1,38 @@
+# @package _global_
+defaults:
+  - override /environment: walker
+  - override /agent: mbpo
+  - override /agent/penalizer: lagrangian
+  - _self_
+
+training:
+  num_timesteps: 2500000
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  safe: true
+  safety_budget: 25
+  action_repeat: 4
+  num_envs: 20
+  num_evals: 15
+  wandb_id: gdd809za
+
+agent:
+  policy_hidden_layer_sizes: [256, 256, 256]
+  value_hidden_layer_sizes: [512, 512]
+  activation: swish
+  batch_size: 256
+  max_replay_size: 4194304
+  critic_grad_updates_per_step: 10
+  model_grad_updates_per_step: 50
+  num_model_rollouts: 50000
+  pessimism: 5
+  optimism: 0.
+  safety_filter: null
+  offline: true
+  discounting: 0.95
+  reward_scaling: 100.
+  penalizer:
+    lagrange_multiplier: 5.
+    penalty_multiplier: 2.
+    penalty_multiplier_factor: 0.25
+  model_to_real_data_ratio: 0.25

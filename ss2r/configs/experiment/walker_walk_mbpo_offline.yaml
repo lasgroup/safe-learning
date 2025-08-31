@@ -10,7 +10,7 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: false
   safe: true
-  safety_budget: 25
+  safety_budget: 100
   action_repeat: 4
   num_envs: 20
   num_evals: 15
@@ -29,8 +29,6 @@ agent:
   optimism: 0.
   safety_filter: null
   offline: true
-  discounting: 0.95
-  reward_scaling: 100.
   penalizer:
     lagrange_multiplier: 5.
     penalty_multiplier: 2.

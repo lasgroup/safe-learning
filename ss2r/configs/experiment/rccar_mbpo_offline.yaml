@@ -38,7 +38,7 @@ agent:
   pessimism: 30
   # Use negative optimism so that the reward is pessimistic w.r.t uncertianty
   # following MOPO paper.
-  optimism: 0.
+  optimism: -100.
   safety_filter: null
   offline: true
   penalizer:

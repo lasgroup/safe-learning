@@ -2,7 +2,7 @@
 defaults:
   - override /environment: walker
   - override /agent: mbpo
-  - override /agent/penalizer: crpo
+  - override /agent/penalizer: lagrangian
   - _self_
 
 training:
@@ -30,3 +30,7 @@ agent:
   safety_filter: null
   offline: true
   model_to_real_data_ratio: 0.25
+  penalizer:
+    lagrange_multiplier: 5.
+    penalty_multiplier: 2.
+    penalty_multiplier_factor: 0.25

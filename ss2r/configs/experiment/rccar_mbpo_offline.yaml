@@ -20,7 +20,7 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: false
   safety_budget: 5.0
-  wandb_id: vahll47z
+  wandb_id: vahll47z-fixed
   render: false
 
 agent:

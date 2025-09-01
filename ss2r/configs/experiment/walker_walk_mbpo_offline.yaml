@@ -11,7 +11,6 @@ training:
   eval_domain_randomization: false
   safe: true
   safety_budget: 100
-  action_repeat: 4
   num_envs: 20
   num_evals: 15
   wandb_id: tdvax0he

@@ -21,7 +21,7 @@ agent:
   value_hidden_layer_sizes: [512, 512]
   activation: swish
   batch_size: 256
-  max_replay_size: 50000
+  max_replay_size: 100000
   num_model_rollouts: 25000
   learning_rate: 3e-4
   critic_learning_rate: 3e-4

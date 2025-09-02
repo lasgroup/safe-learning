@@ -1,0 +1,13 @@
+# @package _global_
+defaults:
+  - cartpole_swingup_simple
+  - _self_
+
+training:
+  # Use high safety budget so that the policy is unsafe
+  safety_budget: 300
+  
+agent:
+  store_buffer: true
+  max_replay_size: 500000
+

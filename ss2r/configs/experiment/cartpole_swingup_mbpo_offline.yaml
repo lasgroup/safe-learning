@@ -1,0 +1,37 @@
+# @package _global_
+defaults:
+  - override /environment: cartpole_swingup
+  - override /agent: mbpo
+  - override /agent/penalizer: lagrangian
+  - _self_
+
+training:
+  action_repeat: 4
+  num_envs: 1
+  num_timesteps: 150000
+  safe: true
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  safety_budget: 100
+  wandb_id: vahll47z
+  render: false
+
+agent:
+  policy_hidden_layer_sizes: [256, 256, 256]
+  value_hidden_layer_sizes: [512, 512]
+  activation: swish
+  batch_size: 256
+  max_replay_size: 4194304
+  num_model_rollouts: 100000
+  learning_rate: 3e-4
+  critic_learning_rate: 3e-4
+  model_learning_rate: 3e-4
+  critic_grad_updates_per_step: 10
+  model_grad_updates_per_step: 50
+  use_termination: false
+  pessimism: 30
+  # Use negative optimism so that the reward is pessimistic w.r.t uncertianty
+  # following MOPO paper.
+  optimism: -10
+  safety_filter: null
+  offline: true

@@ -13,7 +13,7 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: false
   safety_budget: 100
-  wandb_id: vahll47z
+  wandb_id: i6h4yhro
   render: false
 
 agent:

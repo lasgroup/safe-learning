@@ -18,6 +18,7 @@ environment:
     action_history_length: 5
     vision_config:
       render_batch_size: 1
+    use_ball: false
     box_init_range: 0.
     obs_noise:
       brightness: [1., 1.]

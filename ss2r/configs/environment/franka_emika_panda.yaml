@@ -2,7 +2,7 @@ defaults:
   - mujoco_playground_base
 task_name: PandaPickCubeCartesianExtended
 task_params:
-  red_box: false
+  use_ball: false
   use_x: false
   ctrl_dt: 0.05
   sim_dt: 0.005

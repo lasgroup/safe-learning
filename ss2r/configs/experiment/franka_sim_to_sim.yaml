@@ -7,4 +7,4 @@ defaults:
 
 environment:
   task_params:
-    red_box: true
+    use_ball: true

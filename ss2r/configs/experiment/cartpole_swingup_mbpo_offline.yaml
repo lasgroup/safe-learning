@@ -35,3 +35,7 @@ agent:
   optimism: -100
   safety_filter: null
   offline: true
+  penalizer:
+    lagrange_multiplier: 5.
+    penalty_multiplier: 2.
+    penalty_multiplier_factor: 0.25

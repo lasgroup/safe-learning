@@ -24,7 +24,7 @@ agent:
   critic_grad_updates_per_step: 10
   model_grad_updates_per_step: 50
   num_model_rollouts: 50000
-  pessimism: 30
+  pessimism: 50
   optimism: -10
   safety_filter: null
   offline: true
@@ -33,3 +33,4 @@ agent:
     lagrange_multiplier: 5.
     penalty_multiplier: 2.
     penalty_multiplier_factor: 0.25
+  

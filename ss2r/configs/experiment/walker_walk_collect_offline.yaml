@@ -6,7 +6,7 @@ defaults:
 training:
   num_timesteps: 2000000
   # Use high safety budget so that the policy is unsafe
-  safety_budget: 1000
+  safety_budget: 12.5
 
 agent:
   store_buffer: true

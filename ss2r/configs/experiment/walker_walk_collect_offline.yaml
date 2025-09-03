@@ -4,9 +4,9 @@ defaults:
   - override /environment: walker
 
 training:
-  num_timesteps: 20000000
+  num_timesteps: 2000000
   # Use high safety budget so that the policy is unsafe
-  safety_budget: 150
+  safety_budget: 1000
 
 agent:
   store_buffer: true

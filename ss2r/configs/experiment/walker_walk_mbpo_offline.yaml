@@ -6,12 +6,11 @@ defaults:
   - _self_
 
 training:
-  num_timesteps: 2500000
+  num_timesteps: 100000
   train_domain_randomization: false
   eval_domain_randomization: false
   safe: true
   safety_budget: 100
-  num_envs: 20
   num_evals: 15
   wandb_id: tdvax0he
 

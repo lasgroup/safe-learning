@@ -1,0 +1,35 @@
+# @package _global_
+defaults:
+  - override /environment: walker
+  - override /agent: mbpo
+  - override /agent/data_collection: episodic
+  - override /agent/cost_robustness: pessimistic_cost_update
+  - _self_
+
+training:
+  num_timesteps: 300000
+  safe: true
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  safety_budget: 100
+  num_envs: 1
+  num_evals: 20
+  wandb_id: itfv6umm
+
+agent:
+  policy_hidden_layer_sizes: [256, 256, 256]
+  value_hidden_layer_sizes: [512, 512]
+  activation: swish
+  batch_size: 256
+  min_replay_size: 1000
+  max_replay_size: 1048576
+  critic_grad_updates_per_step: 4000
+  model_grad_updates_per_step: 20000
+  num_model_rollouts: 100000
+  learning_rate: 1e-5
+  critic_learning_rate: 1e-5
+  model_learning_rate: 3e-4
+  pessimism: 10
+  optimism: 0
+  advantage_threshold: 0.2
+  safety_filter: sooper

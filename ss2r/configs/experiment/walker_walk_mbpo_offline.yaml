@@ -13,7 +13,7 @@ training:
   safety_budget: 100.
   num_envs: 20
   num_evals: 15
-  wandb_id: tdvax0he
+  wandb_id: vmx8m6l1
 
 agent:
   policy_hidden_layer_sizes: [256, 256, 256]
@@ -24,8 +24,8 @@ agent:
   critic_grad_updates_per_step: 10
   model_grad_updates_per_step: 50
   num_model_rollouts: 50000
-  pessimism: 50
-  optimism: -10
+  pessimism: 30
+  optimism: 0
   safety_filter: null
   offline: true
   model_to_real_data_ratio: 0.25

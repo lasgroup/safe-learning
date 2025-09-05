@@ -14,7 +14,7 @@ training:
   safety_budget: 100
   num_envs: 1
   num_evals: 20
-  wandb_id: wifyoove
+  wandb_id: itfv6umm
 
 agent:
   policy_hidden_layer_sizes: [256, 256, 256]
@@ -26,11 +26,10 @@ agent:
   critic_grad_updates_per_step: 4000
   model_grad_updates_per_step: 20000
   num_model_rollouts: 100000
-  learning_rate: 1e-6
-  critic_learning_rate: 1e-6
-  num_critic_updates_per_actor_update: 100
+  learning_rate: 1e-5
+  critic_learning_rate: 1e-5
   model_learning_rate: 3e-4
-  pessimism: 3
+  pessimism: 10
   optimism: 0
   advantage_threshold: 0.2
   safety_filter: sooper

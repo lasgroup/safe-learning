@@ -283,6 +283,8 @@ class RCCar(Env):
         prev_goal_dist = state.pipeline_state[2]
         get_close_reward = prev_goal_dist - goal_dist
         goal_achieved = jnp.less_equal(goal_dist, 0.35).astype(jnp.float32)
+        # TODO (yarden): take only the second component of action that relates
+        # to linear velocity
         action_magnitude_cost = -(
             jnp.linalg.norm(delayed_action) * self.control_penalty_scale
         )

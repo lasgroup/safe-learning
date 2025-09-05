@@ -6,4 +6,5 @@ defaults:
 
 
 environment:
-  task_name: PandaPickCubeCartesian
+  task_params:
+    use_ball: true

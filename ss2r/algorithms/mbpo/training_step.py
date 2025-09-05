@@ -53,6 +53,7 @@ def make_training_step(
     safety_budget,
     safety_filter,
     offline,
+    pure_exploration_steps,
 ):
     def critic_sgd_step(
         carry: Tuple[TrainingState, PRNGKey], transitions: Transition
@@ -290,6 +291,7 @@ def make_training_step(
     def relabel_transitions(
         planning_env: ModelBasedEnv,
         transitions: Transition,
+        training_step: int,
     ) -> Tuple[Transition, Dict[str, Any]]:
         pred_fn = planning_env.model_network.apply
         model_params = planning_env.model_params
@@ -310,6 +312,12 @@ def make_training_step(
             else next_obs_pred["state"].std(axis=0).mean(-1)
         )
         new_reward = reward.mean(0) + disagreement * optimism
+        if pure_exploration_steps is not None:
+            new_reward = jnp.where(
+                training_step < pure_exploration_steps,
+                disagreement * optimism,
+                new_reward,
+            )
         discount = transitions.discount
         metrics = {"disagreement": disagreement}
         if safe:
@@ -436,7 +444,9 @@ def make_training_step(
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),
             transitions,
         )
-        transitions, more_metrics = relabel_transitions(planning_env, transitions)
+        transitions, more_metrics = relabel_transitions(
+            planning_env, transitions, training_state.env_steps
+        )
         (training_state, _), critic_metrics = jax.lax.scan(
             critic_sgd_step, (training_state, training_key), transitions
         )

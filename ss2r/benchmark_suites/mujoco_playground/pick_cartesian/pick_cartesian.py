@@ -332,6 +332,8 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
         ]
         mj_model.geom_matid[geoms] = mj_model.mat("off_white").id
         if self._config.use_ball:
+            mj_model.geom("box").matid = jp.array([-1])
+            mj_model.geom("box").rgba = jp.array([1, 0, 0, 0.2])
             mj_model.geom("box").type = mujoco.mjtGeom.mjGEOM_SPHERE
             mj_model.geom("box").size = jp.array([0.03])
             mj_model.opt.impratio = 5

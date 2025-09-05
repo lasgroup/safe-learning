@@ -209,6 +209,7 @@ def train(
     load_auxiliaries: bool = False,
     load_normalizer: bool = True,
     target_entropy: float | None = None,
+    pure_exploration_steps: int | None = None,
 ):
     if min_replay_size >= num_timesteps:
         raise ValueError(
@@ -507,6 +508,7 @@ def train(
         safety_budget,
         safety_filter,
         offline,
+        pure_exploration_steps,
     )
 
     def prefill_replay_buffer(

@@ -1,0 +1,42 @@
+# @package _global_
+defaults:
+  - override /environment: rccar_real
+  - override /agent: mbpo
+  - override /agent/cost_robustness: pessimistic_cost_update
+  - override /agent/data_collection: episodic
+  - override /agent/penalizer: lbsgd
+  - _self_
+
+environment:
+  action_delay: 1
+  observation_delay: 0
+  sliding_window: 5
+  dt: 0.03333333
+  sample_init_pose: false
+
+training:
+  num_envs: 1
+  num_timesteps: 10000
+  episode_length: 250
+  safe: true
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  safety_budget: 5.0
+  wandb_id: 0ltkzlyo
+
+agent:
+  batch_size: 256
+  min_replay_size: 500
+  max_replay_size: 1048576
+  policy_hidden_layer_sizes: [64, 64]
+  critic_grad_updates_per_step: 4000
+  model_grad_updates_per_step: 50000
+  num_model_rollouts: 100000
+  learning_rate: 1e-4
+  critic_learning_rate: 1e-4
+  model_learning_rate: 3e-4
+  optimism: 0
+  pessimism: 0
+  cost_robustness: null
+  use_termination: false
+  safety_filter: null

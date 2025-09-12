@@ -154,6 +154,42 @@ def update_lagrange_multiplier(
     return new_multiplier
 
 
+class LBSGDParams(NamedTuple):
+    eta: float
+
+
+class LBSGD:
+    def __init__(self, eta_rate: float, epsilon: float = 1e-7):
+        self.eta_rate = eta_rate
+        self.epsilon = epsilon
+
+    def __call__(
+        self,
+        actor_loss: jax.Array,
+        constraint: jax.Array,
+        params: LBSGDParams,
+        *,
+        rest: Any = None,
+    ) -> tuple[jax.Array, dict[str, Any], LBSGDParams]:
+        active = jnp.greater(constraint, 0.0)
+        constraint_loss = jnp.where(active, constraint, 0.0)
+        constraint_loss = -jnp.log(constraint_loss + self.epsilon)
+        combined_loss = actor_loss + params.eta * constraint_loss
+        loss = jnp.where(
+            active,
+            combined_loss,
+            -constraint,
+        )
+
+        new_params = LBSGDParams(params.eta * self.eta_rate)
+        aux = {
+            "lbsgd/eta": new_params.eta,
+            "lbsgd/active": active,
+        }
+
+        return loss, aux, new_params
+
+
 def get_penalizer(cfg):
     if "penalizer" not in cfg.agent:
         return None, None
@@ -175,6 +211,12 @@ def get_penalizer(cfg):
         )
     elif cfg.agent.penalizer.name == "saute":
         return None, None
+    elif cfg.agent.penalizer.name == "lbsgd":
+        penalizer = LBSGD(
+            cfg.agent.penalizer.eta_rate,
+            cfg.agent.penalizer.epsilon,
+        )
+        penalizer_state = LBSGDParams(cfg.agent.penalizer.initial_eta)
     else:
         raise ValueError(f"Unknown penalizer {cfg.agent.penalizer.name}")
     return penalizer, penalizer_state

@@ -51,3 +51,5 @@ learn_from_scratch: false
 load_auxiliaries: false
 load_normalizer: true
 target_entropy: null
+
+pure_exploration_steps: null

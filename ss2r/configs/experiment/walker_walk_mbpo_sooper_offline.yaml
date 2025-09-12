@@ -14,7 +14,7 @@ training:
   safety_budget: 100
   num_envs: 1
   num_evals: 20
-  wandb_id: itfv6umm
+  wandb_id: bdtz4rba
 
 agent:
   policy_hidden_layer_sizes: [256, 256, 256]

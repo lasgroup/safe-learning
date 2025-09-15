@@ -1,4 +1,4 @@
 name: lbsgd
 initial_eta: 0.1
-eta_rate: 1.01
+eta_rate: 8e-6
 epsilon: 1e-7

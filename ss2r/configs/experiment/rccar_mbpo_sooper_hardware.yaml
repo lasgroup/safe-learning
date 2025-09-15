@@ -21,7 +21,7 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: false
   safety_budget: 5.
-  wandb_id: 0ltkzlyo # mep3e25n for offline to online
+  wandb_id: 0ltkzlyo # qjhisaff for offline to online
   render: false
 
 agent:

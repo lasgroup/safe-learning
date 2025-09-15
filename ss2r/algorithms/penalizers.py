@@ -212,8 +212,9 @@ def get_penalizer(cfg):
     elif cfg.agent.penalizer.name == "saute":
         return None, None
     elif cfg.agent.penalizer.name == "lbsgd":
+        eta_rate = cfg.agent.penalizer.eta_rate + 1.0
         penalizer = LBSGD(
-            cfg.agent.penalizer.eta_rate,
+            eta_rate,
             cfg.agent.penalizer.epsilon,
         )
         penalizer_state = LBSGDParams(cfg.agent.penalizer.initial_eta)

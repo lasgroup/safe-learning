@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - override /environment: cartpole_swingup
+  - override /environment: walker
   - override /agent: mbpo
   - override /agent/data_collection: episodic
   - override /agent/cost_robustness: pessimistic_cost_update
@@ -8,15 +8,14 @@ defaults:
   - _self_
 
 training:
-  num_timesteps: 80000
-  action_repeat: 4
+  num_timesteps: 300000
   safe: true
   train_domain_randomization: false
   eval_domain_randomization: false
   safety_budget: 100
   num_envs: 1
   num_evals: 20
-  wandb_id: gaj7zb12
+  wandb_id: itfv6umm
 
 agent:
   policy_hidden_layer_sizes: [256, 256, 256]
@@ -25,18 +24,16 @@ agent:
   batch_size: 256
   min_replay_size: 1000
   max_replay_size: 1048576
-  critic_grad_updates_per_step: 3000
-  model_grad_updates_per_step: 50000
+  critic_grad_updates_per_step: 4000
+  model_grad_updates_per_step: 20000
   num_model_rollouts: 100000
-  learning_rate: 1e-5
-  critic_learning_rate: 1e-4
+  learning_rate: 1e-7
+  critic_learning_rate: 1e-6
+  num_critic_updates_per_actor_update: 100
   model_learning_rate: 3e-4
   pessimism: 0
   optimism: 0
   advantage_threshold: 0.2
-  safety_filter: null
   cost_robustness: null
   use_termination: false
-  penalizer:
-    initial_eta: 0.7
-    eta_rate: 1e-6
+  safety_filter: null

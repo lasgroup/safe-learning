@@ -29,7 +29,8 @@ agent:
   learning_rate: 1e-5
   critic_learning_rate: 1e-5
   model_learning_rate: 3e-4
-  pessimism: 10
-  optimism: 0
+  pessimism: 5
+  optimism: 0.5
+  cost_scaling: 2
   advantage_threshold: 0.2
   safety_filter: sooper

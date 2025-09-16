@@ -721,13 +721,23 @@ def train(
                 policy_optimizer_state = policy_optimizer.init(policy_params)
                 qr_params = mbpo_network.qr_network.init(key_qr)
                 qr_optimizer_state = qr_optimizer.init(qr_params)
+                if mbpo_network.qc_network is not None:
+                    qc_params = mbpo_network.qc_network.init(key_qr)
+                    qc_optimizer_state = qc_optimizer.init(qc_params)
+                else:
+                    qc_params = None
+                    qc_optimizer_state = None
                 log_alpha = jnp.asarray(jnp.log(init_alpha), dtype=jnp.float32)
                 alpha_optimizer_state = alpha_optimizer.init(log_alpha)
                 training_state = training_state.replace(  # type: ignore
                     behavior_policy_params=policy_params,
                     behavior_qr_params=qr_params,
+                    behavior_qc_params=qc_params,
+                    behavior_target_qr_params=qr_params,
+                    behavior_target_qc_params=qc_params,
                     behavior_policy_optimizer_state=policy_optimizer_state,
                     behavior_qr_optimizer_state=qr_optimizer_state,
+                    behavior_qc_optimizer_state=qc_optimizer_state,
                     alpha_optimizer_state=alpha_optimizer_state,
                     alpha_params=log_alpha,
                 )

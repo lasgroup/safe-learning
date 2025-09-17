@@ -1,0 +1,12 @@
+# @package _global_
+defaults:
+  - cartpole_swingup_mbpo_sooper_lbsgd
+  - _self_
+
+training:
+  wandb_id: null
+
+agent:
+  pessimism: 0
+  optimism: 0
+  pure_exploration_steps: 20000

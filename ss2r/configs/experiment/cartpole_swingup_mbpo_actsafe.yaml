@@ -8,5 +8,8 @@ training:
 
 agent:
   pessimism: 0
-  optimism: 0
+  optimism: 10
+  learning_rate: 3e-4
+  critic_learning_rate: 3e-4
+  model_learning_rate: 3e-4
   pure_exploration_steps: 20000

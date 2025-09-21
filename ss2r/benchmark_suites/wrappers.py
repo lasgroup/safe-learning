@@ -147,6 +147,10 @@ class NonEpisodicWrapper(Wrapper):
         state = self.env.reset(rng)
         state.info["steps"] = jp.zeros(rng.shape[:-1])
         state.info["average_reward"] = jp.zeros(rng.shape[:-1])
+        metrics = {
+            "average_reward": state.info["average_reward"],
+        }
+        state.metrics.update(metrics)
         # Keep separate record of episode done as state.info['done'] can be erased
         # by AutoResetWrapper
         return state
@@ -170,6 +174,7 @@ class NonEpisodicWrapper(Wrapper):
         average_reward = (rewards - state.info["average_reward"]) / steps
         state.info["steps"] = steps
         state.info["average_reward"] = average_reward
+        state.metrics["average_reward"] = average_reward
         return state
 
 

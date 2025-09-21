@@ -13,7 +13,9 @@ from ss2r.algorithms.sac.q_transforms import (
 
 def get_training_step_fn(cfg):
     if cfg.agent.training_step_fn == "on_policy":
-        return on_policy_training_step
+        return on_policy_training_step.make_on_policy_training_step
+    else:
+        raise ValueError(f"Unknown training_step_fn: {cfg.agent.training_step_fn}")
 
 
 def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):

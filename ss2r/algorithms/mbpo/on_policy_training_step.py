@@ -8,7 +8,7 @@ from brax.training import acting
 from brax.training.types import Policy, PRNGKey
 
 from ss2r.algorithms.mbpo.model_env import ModelBasedEnv
-from ss2r.algorithms.mbpo.types import TrainingState
+from ss2r.algorithms.mbpo.types import TrainingState, TrainingStepFn
 from ss2r.algorithms.sac.types import (
     Metrics,
     ReplayBufferState,
@@ -18,7 +18,7 @@ from ss2r.algorithms.sac.types import (
 )
 
 
-def make_training_step(
+def make_on_policy_training_step(
     env,
     make_planning_policy,
     make_rollout_policy,
@@ -54,7 +54,7 @@ def make_training_step(
     safety_filter,
     offline,
     pure_exploration_steps,
-):
+) -> TrainingStepFn:
     def critic_sgd_step(
         carry: Tuple[TrainingState, PRNGKey], transitions: Transition
     ) -> Tuple[Tuple[TrainingState, PRNGKey], Metrics]:
@@ -388,8 +388,12 @@ def make_training_step(
         model_buffer_state: ReplayBufferState,
         sac_buffer_state: ReplayBufferState,
         key: PRNGKey,
-    ) -> Tuple[TrainingState, envs.State, ReplayBufferState, Metrics]:
+    ) -> Tuple[
+        TrainingState, envs.State, ReplayBufferState, ReplayBufferState, Metrics
+    ]:
         """Splits training into experience collection and a jitted training step."""
+        # Keep the original buffer state, so that model-generated data is discarded
+        initial_sac_buffer_state = sac_buffer_state
         if not offline:
             (
                 training_state,
@@ -467,6 +471,12 @@ def make_training_step(
         metrics["buffer_current_size"] = model_replay_buffer.size(model_buffer_state)
         metrics |= env_state.metrics
         metrics |= more_metrics
-        return training_state, env_state, model_buffer_state, metrics
+        return (
+            training_state,
+            env_state,
+            model_buffer_state,
+            initial_sac_buffer_state,
+            metrics,
+        )
 
     return training_step

@@ -36,8 +36,8 @@ import ss2r.algorithms.mbpo.losses as mbpo_losses
 import ss2r.algorithms.mbpo.networks as mbpo_networks
 from ss2r.algorithms.mbpo import safety_filters
 from ss2r.algorithms.mbpo.model_env import create_model_env
-from ss2r.algorithms.mbpo.on_policy_training_step import make_training_step
-from ss2r.algorithms.mbpo.types import TrainingState
+from ss2r.algorithms.mbpo.on_policy_training_step import make_on_policy_training_step
+from ss2r.algorithms.mbpo.types import TrainingState, TrainingStepFn
 from ss2r.algorithms.penalizers import Params, Penalizer
 from ss2r.algorithms.sac import gradients
 from ss2r.algorithms.sac.data import collect_single_step
@@ -153,7 +153,7 @@ def train(
     num_eval_episodes: int = 10,
     wrap_env_fn: Optional[Callable[[Any], Any]] = None,
     get_experience_fn: CollectDataFn = collect_single_step,
-    make_training_step_fn=make_training_step,
+    make_training_step_fn: Callable[..., TrainingStepFn] = make_on_policy_training_step,
     learning_rate: float = 1e-4,
     critic_learning_rate: float = 1e-4,
     model_learning_rate: float = 1e-4,
@@ -558,7 +558,7 @@ def train(
         def f(carry, unused_t):
             ts, es, mbs, acbs, k = carry
             k, new_key = jax.random.split(k)
-            ts, es, mbs, metrics = training_step(ts, es, mbs, acbs, k)
+            ts, es, mbs, acbs, metrics = training_step(ts, es, mbs, acbs, k)
             return (ts, es, mbs, acbs, new_key), metrics
 
         (

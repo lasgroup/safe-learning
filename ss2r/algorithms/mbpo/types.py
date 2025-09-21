@@ -1,8 +1,12 @@
+from typing import Callable, Tuple
+
 import flax
 import jax.numpy as jnp
 import optax
+from brax import envs
 from brax.training.acme import running_statistics
-from brax.training.types import Params
+from brax.training.replay_buffers import ReplayBufferState
+from brax.training.types import Metrics, Params, PRNGKey
 
 
 @flax.struct.dataclass
@@ -30,3 +34,9 @@ class TrainingState:
     alpha_params: Params
     normalizer_params: running_statistics.RunningStatisticsState
     penalizer_params: Params
+
+
+TrainingStepFn = Callable[
+    [TrainingState, envs.State, ReplayBufferState, ReplayBufferState, PRNGKey],
+    Tuple[TrainingState, envs.State, ReplayBufferState, ReplayBufferState, Metrics],
+]

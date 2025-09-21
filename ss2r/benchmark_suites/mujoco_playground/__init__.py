@@ -60,6 +60,7 @@ def wrap_for_brax_training(
         Callable[[mjx.Model], Tuple[mjx.Model, mjx.Model]]
     ] = None,
     hard_resets: bool = False,
+    nonepisodic: bool = False,
     *,
     augment_state: bool = False,
 ) -> mujoco_playground_wrapper.Wrapper:
@@ -90,9 +91,12 @@ def wrap_for_brax_training(
         env = wrappers.BraxDomainRandomizationVmapWrapper(
             env, randomization_fn, augment_state=augment_state
         )
-    env = wrappers.CostEpisodeWrapper(env, episode_length, action_repeat)
-    if hard_resets:
-        env = wrappers.HardAutoResetWrapper(env)
+    if nonepisodic:
+        env = mujoco_playground_wrapper.NonepisodicWrapper(env)
     else:
-        env = mujoco_playground_wrapper.BraxAutoResetWrapper(env)
+        env = wrappers.CostEpisodeWrapper(env, episode_length, action_repeat)
+        if hard_resets:
+            env = wrappers.HardAutoResetWrapper(env)
+        else:
+            env = mujoco_playground_wrapper.BraxAutoResetWrapper(env)
     return env

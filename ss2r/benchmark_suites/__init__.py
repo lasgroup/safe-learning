@@ -398,6 +398,7 @@ def make_mujoco_playground_envs(cfg, train_wrap_env_fn, eval_wrap_env_fn):
         hard_resets=cfg.training.hard_resets,
         vision=vision,
         num_vision_envs=cfg.training.num_envs,
+        nonepisodic=cfg.training.nonepisodic,
     )
     if vision:
         return train_env, train_env

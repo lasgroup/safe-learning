@@ -52,3 +52,4 @@ training:
   store_checkpoint: true
   wandb_id: null
   hard_resets: false
+  nonepisodic: false

@@ -36,7 +36,7 @@ import ss2r.algorithms.mbpo.losses as mbpo_losses
 import ss2r.algorithms.mbpo.networks as mbpo_networks
 from ss2r.algorithms.mbpo import safety_filters
 from ss2r.algorithms.mbpo.model_env import create_model_env
-from ss2r.algorithms.mbpo.training_step import make_training_step
+from ss2r.algorithms.mbpo.on_policy_training_step import make_training_step
 from ss2r.algorithms.mbpo.types import TrainingState
 from ss2r.algorithms.penalizers import Params, Penalizer
 from ss2r.algorithms.sac import gradients
@@ -153,6 +153,7 @@ def train(
     num_eval_episodes: int = 10,
     wrap_env_fn: Optional[Callable[[Any], Any]] = None,
     get_experience_fn: CollectDataFn = collect_single_step,
+    make_training_step_fn=make_training_step,
     learning_rate: float = 1e-4,
     critic_learning_rate: float = 1e-4,
     model_learning_rate: float = 1e-4,
@@ -473,7 +474,7 @@ def train(
         safety_filter=safety_filter,
         initial_normalizer_params=training_state.normalizer_params,
     )
-    training_step = make_training_step(
+    training_step = make_training_step_fn(
         env,
         make_planning_policy,
         make_rollout_policy,

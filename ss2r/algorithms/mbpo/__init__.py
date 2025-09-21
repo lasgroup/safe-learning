@@ -2,12 +2,18 @@ import functools
 
 import ss2r.algorithms.mbpo.networks as mbpo_networks
 import ss2r.algorithms.mbpo.vision_networks as mbpo_vision_networks
+from ss2r.algorithms.mbpo import on_policy_training_step
 from ss2r.algorithms.penalizers import get_penalizer
 from ss2r.algorithms.sac.data import get_collection_fn
 from ss2r.algorithms.sac.q_transforms import (
     get_cost_q_transform,
     get_reward_q_transform,
 )
+
+
+def get_training_step_fn(cfg):
+    if cfg.agent.training_step_fn == "on_policy":
+        return on_policy_training_step
 
 
 def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
@@ -47,6 +53,8 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
         del agent_cfg["propagation"]
     if "data_collection" in agent_cfg:
         del agent_cfg["data_collection"]
+    if "training_step_fn" in agent_cfg:
+        del agent_cfg["training_step_fn"]
     if "use_vision" in agent_cfg and agent_cfg["use_vision"]:
         network_factory = functools.partial(
             mbpo_vision_networks.make_mbpo_vision_networks,
@@ -75,6 +83,7 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
     reward_q_transform = get_reward_q_transform(cfg)
     cost_q_transform = get_cost_q_transform(cfg)
     data_collection = get_collection_fn(cfg)
+    training_step_fn = get_training_step_fn(cfg)
     train_fn = functools.partial(
         mbpo.train,
         **agent_cfg,
@@ -86,6 +95,7 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
         penalizer=penalizer,
         penalizer_params=penalizer_params,
         get_experience_fn=data_collection,
+        make_training_step_fn=training_step_fn,
         restore_checkpoint_path=restore_checkpoint_path,
     )
     return train_fn

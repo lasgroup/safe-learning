@@ -4,8 +4,8 @@ defaults:
   - _self_
 
 agent:
-  pessimism: 20
-  optimism: 0
+  pessimism: 50
+  optimism: 20 # optimism is required to scale uncertainty
   pure_exploration_steps: 20000
   penalizer:
     initial_eta: 1.

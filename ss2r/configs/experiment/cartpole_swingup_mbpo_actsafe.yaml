@@ -3,13 +3,10 @@ defaults:
   - cartpole_swingup_mbpo_sooper_lbsgd
   - _self_
 
-training:
-  wandb_id: null
-
 agent:
-  # pessimism: 0
-  # optimism: 10
-  # learning_rate: 3e-4
-  # critic_learning_rate: 3e-4
-  # model_learning_rate: 3e-4
+  pessimism: 20
+  optimism: 0
   pure_exploration_steps: 20000
+  penalizer:
+    initial_eta: 1.
+    eta_rate: 8e-6

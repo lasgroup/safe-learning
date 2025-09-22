@@ -3,7 +3,6 @@ defaults:
   - override /environment: cartpole_swingup
   - override /agent: mbpo
   - override /agent/data_collection: episodic
-  - override /agent/cost_robustness: pessimistic_cost_update
   - override /agent/penalizer: lbsgd
   - _self_
 

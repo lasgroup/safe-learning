@@ -3,9 +3,6 @@ defaults:
   - cartpole_swingup_mbpo_sooper_lbsgd
   - _self_
 
-training:
-  wandb_id: null
-
 agent:
   pessimism: 200
   optimism: 15

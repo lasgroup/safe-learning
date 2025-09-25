@@ -177,9 +177,10 @@ class NonEpisodicWrapper(Wrapper):
         if maybe_eval_rewards is not None:
             state.info["eval_reward"] = jp.sum(maybe_eval_rewards, axis=0)
         steps = state.info["steps"] + self.action_repeat
+        sum_rewards /= self.action_repeat
         average_reward = (
             state.info["average_reward"]
-            + (sum_rewards - state.info["average_reward"]) / steps
+            + (sum_rewards - state.info["average_reward"]) * self.action_repeat / steps
         )
         state.info["steps"] = steps
         state.info["average_reward"] = average_reward

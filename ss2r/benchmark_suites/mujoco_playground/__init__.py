@@ -92,7 +92,7 @@ def wrap_for_brax_training(
             env, randomization_fn, augment_state=augment_state
         )
     if nonepisodic:
-        env = wrappers.NonEpisodicWrapper(env)
+        env = wrappers.NonEpisodicWrapper(env, action_repeat)
     else:
         env = wrappers.CostEpisodeWrapper(env, episode_length, action_repeat)
         if hard_resets:

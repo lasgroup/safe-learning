@@ -143,6 +143,10 @@ class CostEpisodeWrapper(brax_training.EpisodeWrapper):
 
 
 class NonEpisodicWrapper(Wrapper):
+    def __init__(self, env: Env, action_repeat: int):
+        super().__init__(env)
+        self.action_repeat = action_repeat
+
     def reset(self, rng):
         state = self.env.reset(rng)
         state.info["steps"] = jp.zeros(rng.shape[:-1])
@@ -150,6 +154,7 @@ class NonEpisodicWrapper(Wrapper):
         metrics = {
             "average_reward": state.info["average_reward"],
         }
+        state.info["truncation"] = jp.zeros(rng.shape[:-1])
         state.metrics.update(metrics)
         # Keep separate record of episode done as state.info['done'] can be erased
         # by AutoResetWrapper
@@ -165,13 +170,14 @@ class NonEpisodicWrapper(Wrapper):
         state, (rewards, maybe_costs, maybe_eval_rewards) = jax.lax.scan(
             f, state, (), self.action_repeat
         )
-        state = state.replace(reward=jp.sum(rewards, axis=0))
+        sum_rewards = jp.sum(rewards, axis=0)
+        state = state.replace(reward=sum_rewards)
         if maybe_costs is not None:
             state.info["cost"] = jp.sum(maybe_costs, axis=0)
         if maybe_eval_rewards is not None:
             state.info["eval_reward"] = jp.sum(maybe_eval_rewards, axis=0)
         steps = state.info["steps"] + self.action_repeat
-        average_reward = (rewards - state.info["average_reward"]) / steps
+        average_reward = (sum_rewards - state.info["average_reward"]) / steps
         state.info["steps"] = steps
         state.info["average_reward"] = average_reward
         state.metrics["average_reward"] = average_reward

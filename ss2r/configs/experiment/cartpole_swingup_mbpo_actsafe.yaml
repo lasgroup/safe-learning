@@ -1,0 +1,9 @@
+# @package _global_
+defaults:
+  - cartpole_swingup_mbpo_sooper_lbsgd
+  - _self_
+
+agent:
+  pessimism: 200
+  optimism: 15
+  pure_exploration_steps: 30000

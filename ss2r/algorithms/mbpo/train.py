@@ -691,7 +691,6 @@ def train(
     logging.info("replay size after prefill %s", replay_size)
     assert replay_size >= min_replay_size
     training_walltime = time.time() - t
-
     current_step = 0
     for _ in range(num_evals_after_init):
         logging.info("step %s", current_step)

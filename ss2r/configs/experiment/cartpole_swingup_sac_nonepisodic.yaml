@@ -1,0 +1,19 @@
+# @package _global_
+defaults:
+  - mujoco_playground_dm_control
+  - override /environment: cartpole_swingup
+  - _self_
+
+
+training:
+  num_timesteps: 5000000
+  action_repeat: 4
+  safe: true
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  safety_budget: 100
+  num_eval_episodes: 1
+  nonepisodic: true
+
+agent:
+  activation: swish

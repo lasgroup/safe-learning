@@ -1,0 +1,6 @@
+
+training:
+  nonepisodic: true
+  
+agent:
+  reset_on_eval: false

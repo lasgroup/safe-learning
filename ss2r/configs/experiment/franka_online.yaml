@@ -10,7 +10,7 @@ training:
   wandb_id: p3k0zz4y
   num_envs: 1
   num_eval_envs: 1
-  num_evals: 100
+  num_evals: 5
   episode_length: 250
 
 environment:
@@ -32,3 +32,4 @@ agent:
   grad_updates_per_step: 500
   learning_rate: 1e-5
   critic_learning_rate: 3e-4
+  num_critic_updates_per_actor_update: 1

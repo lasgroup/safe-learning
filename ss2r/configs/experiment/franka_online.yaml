@@ -25,7 +25,7 @@ environment:
       brightness: [1., 1.]
 
 agent:
-  min_replay_size: 5000
+  min_replay_size: 250
   replay_buffer:
     wandb_ids:
       - 3mjz962p

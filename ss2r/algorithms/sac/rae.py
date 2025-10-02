@@ -140,19 +140,27 @@ def prepare_offline_data(wandb_ids, wandb_entity):
         checkpoint_path = get_wandb_checkpoint(wandb_id, wandb_entity)
         params = checkpoint.load(checkpoint_path)
         replay_buffer_state = params[-1]
-        data.append(replay_buffer_state["data"])
-        last_position += replay_buffer_state["sample_position"]
+        size = (
+            replay_buffer_state["insert_position"]
+            - replay_buffer_state["sample_position"]
+        )
+        valid_data = jax.tree.map(
+            lambda x: x[
+                replay_buffer_state["sample_position"] : replay_buffer_state[
+                    "insert_position"
+                ]
+            ],
+            replay_buffer_state["data"],
+        )
+        data.append(valid_data)
+        last_position += size
     concatenated_data = jax.tree.map(lambda *xs: jnp.concatenate(xs, axis=0), *data)
     concatenated_data = Transition(**concatenated_data)
     key = replay_buffer_state["key"]
-    # FIXME: this sample position is wrong because it does not correspond
-    # to the position of the correct data points when concatenating the data
-    # the correct approach is to use the sample position of each dataset,
-    # and filter out everything beyond it, and then concatenate.
-    sample_position = insert_position = jnp.array(last_position, dtype=jnp.int32)
+    assert last_position == (concatenated_data.shape[0] - 1)
     return pusq.PytreeReplayBufferState(
         data=concatenated_data,
-        insert_position=insert_position,
+        insert_position=jnp.array(last_position, dtype=jnp.int32),
         key=key,
-        sample_position=sample_position,
+        sample_position=jnp.array(0, dtype=jnp.int32),
     )

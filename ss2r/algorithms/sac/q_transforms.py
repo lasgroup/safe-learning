@@ -137,8 +137,8 @@ def wang(n_samples, wang_eta, next_v, descending=True):
 
 
 class SACBase(QTransformation):
-    def __init__(self, use_bro: bool = True) -> None:
-        self.use_bro = use_bro
+    def __init__(self, pessimistic_q: bool = True) -> None:
+        self.pessimistic_q = pessimistic_q
 
     def __call__(
         self,
@@ -152,7 +152,7 @@ class SACBase(QTransformation):
     ):
         next_action, next_log_prob = policy(transitions.next_observation)
         next_q = q_fn(transitions.next_observation, next_action)
-        if self.use_bro:
+        if not self.pessimistic_q:
             next_v = next_q.mean(axis=-1)
         else:
             next_v = next_q.min(axis=-1)
@@ -290,7 +290,11 @@ def get_reward_q_transform(cfg):
         or cfg.agent.reward_robustness is None
         or cfg.agent.reward_robustness.name == "neutral"
     ):
-        return SACBase(use_bro=cfg.agent.use_bro)
+        if cfg.agent.use_bro:
+            pessimistic_q = cfg.agent.pessimistic_q
+        else:
+            pessimistic_q = True
+        return SACBase(pessimistic_q=pessimistic_q)
     if cfg.agent.reward_robustness.name == "ramu":
         del cfg.agent.reward_robustness.name
         robustness = RAMUReward(

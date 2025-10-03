@@ -42,3 +42,4 @@ actor_wait: 0.
 critic_burnin: 0.
 entropy_bonus: true
 load_buffer: false
+pessimistic_q: false

@@ -2,16 +2,15 @@
 defaults:
   - mujoco_playground_dm_control
   - nonepisodic
-  - override /environment: cartpole_swingup
+  - override /environment: humanoid_getup
   - _self_
+
 
 training:
   num_timesteps: 5000000
-  action_repeat: 4
-  safe: false
   train_domain_randomization: false
   eval_domain_randomization: false
-  num_eval_episodes: 1
+  safe: false
 
 agent:
   activation: swish

@@ -4,7 +4,7 @@ import functools
 import jax
 import jax.numpy as jnp
 from brax import envs
-from mujoco_playground import locomotion, manipulation
+from mujoco_playground import dm_control_suite, locomotion, manipulation
 from mujoco_playground._src.manipulation.franka_emika_panda.randomize_vision import (
     domain_randomize as franka_vision_randomize,
 )
@@ -24,6 +24,7 @@ from ss2r.benchmark_suites.mujoco_playground.go2_joystick import (
     handstand,
     joystick,
 )
+from ss2r.benchmark_suites.mujoco_playground.humanoid import getup as humanoid_getup
 from ss2r.benchmark_suites.mujoco_playground.humanoid import humanoid as dm_humanoid
 from ss2r.benchmark_suites.mujoco_playground.pick_cartesian import pick_cartesian
 from ss2r.benchmark_suites.mujoco_playground.quadruped import quadruped
@@ -60,6 +61,11 @@ manipulation.register_environment(
     "PandaPickCubeCartesianExtended",
     pick_cartesian.PandaPickCubeCartesian,
     pick_cartesian.default_config(),
+)
+dm_control_suite.register_environment(
+    "HumanoidGetup",
+    humanoid_getup.HumanoidGetup,
+    dm_control_suite.humanoid.default_config,
 )
 
 
@@ -501,6 +507,7 @@ randomization_fns = {
     "CartpoleBalanceSparse": dm_cartpole.domain_randomization,
     "CartpoleBalance": dm_cartpole.domain_randomization,
     "HumanoidWalk": dm_humanoid.domain_randomization,
+    "HumanoidGetup": dm_humanoid.domain_randomization,
     "SafeHumanoidWalk": dm_humanoid.domain_randomization,
     "AlohaPegInsertionDistill": manipulation.get_domain_randomizer(
         "AlohaPegInsertionDistill"
@@ -559,6 +566,7 @@ render_fns = {
     "SafeWalkerWalk": functools.partial(mujoco_playground.render, camera="side"),
     "SafeWalkerRun": functools.partial(mujoco_playground.render, camera="side"),
     "HumanoidWalk": mujoco_playground.render,
+    "HumanoidGetup": mujoco_playground.render,
     "SafeHumanoidWalk": mujoco_playground.render,
     "AlohaSinglePegInsertion": mujoco_playground.render,
     "AlohaPegInsertionDistill": mujoco_playground.render,

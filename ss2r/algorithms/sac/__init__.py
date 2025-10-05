@@ -67,6 +67,8 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
         del agent_cfg["data_collection"]
     if "replay_buffer" in agent_cfg:
         del agent_cfg["replay_buffer"]
+    if "pessimistic_q" in agent_cfg:
+        agent_cfg["pessimistic_q"]
     if "use_vision" in agent_cfg and agent_cfg["use_vision"]:
         network_factory = functools.partial(
             sac_vision_networks.make_sac_vision_networks,
@@ -80,7 +82,6 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
             agent_cfg["use_vision"],
             agent_cfg["encoder_hidden_dim"],
             agent_cfg["tanh"],
-            agent_cfg["pessimistic_q"],
         )
         if "lambda_" in agent_cfg:
             del agent_cfg["lambda_"]

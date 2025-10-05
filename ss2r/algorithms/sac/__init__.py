@@ -49,7 +49,6 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
             "wandb_id",
             "hard_resets",
             "nonepisodic",
-            "pessimistic_q",
         ]
     }
     policy_hidden_layer_sizes = agent_cfg.pop("policy_hidden_layer_sizes")
@@ -81,6 +80,7 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
             agent_cfg["use_vision"],
             agent_cfg["encoder_hidden_dim"],
             agent_cfg["tanh"],
+            agent_cfg["pessimistic_q"],
         )
         if "lambda_" in agent_cfg:
             del agent_cfg["lambda_"]

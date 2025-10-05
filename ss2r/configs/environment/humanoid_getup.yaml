@@ -1,0 +1,10 @@
+defaults:
+  - mujoco_playground_base
+
+task_name: HumanoidGetup
+task_params:
+  action_repeat: 1
+  ctrl_dt: 0.025
+  episode_length: 300
+  sim_dt: 0.0025
+  vision: false

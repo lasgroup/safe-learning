@@ -28,7 +28,7 @@ class HumanoidGetup(humanoid.Humanoid):
 
     def _post_init(self):
         super()._post_init()
-        self._settle_steps = int(0.75 / self.sim_dt)
+        self._settle_steps = int(1.0 / self.sim_dt)
         joint_names = [
             "abdomen_z",
             "abdomen_y",
@@ -54,7 +54,12 @@ class HumanoidGetup(humanoid.Humanoid):
                 for name in joint_names
             ]
         )
-        self.joint_ranges = zip(*[self.mj_model.jnt_range[id_] for id_ in joint_ids])
+        self.joint_ranges = jp.array(
+            tuple(zip(*[self.mj_model.jnt_range[id_] for id_ in joint_ids]))
+        )
+        self.qpos_ids = jp.asarray(
+            [self.mj_model.jnt_qposadr[id_] for id_ in joint_ids]
+        )
         self._init_q = mjx_env.init(self.mjx_model).qpos
 
     def _get_random_qpos(self, key: jax.Array) -> jax.Array:
@@ -67,10 +72,10 @@ class HumanoidGetup(humanoid.Humanoid):
         # TODO (yarden): make sure that this is the orientation of
         # the humanoid
         qpos = qpos.at[3:7].set(quat)
-        qpos = qpos.at[7:].set(
+        qpos = qpos.at[self.qpos_ids].set(
             jax.random.uniform(
                 key2,
-                (self.mjx_model.nq - 7,),
+                len(self.qpos_ids),
                 minval=normalize_angle(self.joint_ranges[0]),
                 maxval=normalize_angle(self.joint_ranges[1]),
             )
@@ -79,25 +84,39 @@ class HumanoidGetup(humanoid.Humanoid):
 
     def reset(self, rng: jax.Array) -> mjx_env.State:
         key, key1, key2 = jax.random.split(rng, 3)
-        qpos = jp.where(
-            jax.random.bernoulli(key1, 0.6),
-            self._get_random_qpos(key2),
-            self._init_q,
+        start_on_ground = jax.random.bernoulli(key1, 0.9)
+
+        def ground_init():
+            qpos = self._get_random_qpos(key2)
+            qvel = jp.zeros(self.mjx_model.nv)
+            qvel = qvel.at[0:6].set(
+                jax.random.uniform(key, (6,), minval=-0.5, maxval=0.5)
+            )
+            data = mjx_env.init(self.mjx_model, qpos=qpos, qvel=qvel)
+            data = mjx_env.step(
+                self.mjx_model, data, jp.zeros(self.mjx_model.nu), self._settle_steps
+            )
+            data = data.replace(time=0.0)
+            return data
+
+        def normal_init():
+            data = mjx_env.init(self.mjx_model)
+            return data
+
+        data = jax.lax.cond(
+            start_on_ground,
+            ground_init,
+            normal_init,
         )
-        qvel = jp.zeros(self.mjx_model.nv)
-        qvel = qvel.at[0:6].set(jax.random.uniform(key, (6,), minval=-0.5, maxval=0.5))
-        data = mjx_env.init(self.mj_model, qpos=qpos, qvel=qvel)
-        data = mjx_env.step(self.mjx_model, data, qpos[7:], self._settle_steps)
-        data = data.replace(time=0.0)
         info = {
             "rng": rng,
         }
         metrics = {
-            k: jp.zeros(())
-            for k in [
-                "reward/upright",
-                "reward/stand",
-            ]
+            "reward/standing": jp.zeros(()),
+            "reward/upright": jp.zeros(()),
+            "reward/stand": jp.zeros(()),
+            "reward/small_control": jp.zeros(()),
+            "reward/move": jp.zeros(()),
         }
         obs = self._get_obs(data, info)
         reward, done = jp.zeros(2)

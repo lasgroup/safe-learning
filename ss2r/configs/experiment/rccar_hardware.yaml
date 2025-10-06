@@ -2,6 +2,7 @@
 defaults:
   - override /environment: rccar_real
   - override /agent/replay_buffer: rae
+  - override /agent/data_collection: hardware
   - _self_
 
 environment:

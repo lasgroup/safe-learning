@@ -1,7 +1,6 @@
 # @package _global_
 defaults:
   - override /environment: rccar_real
-  - override /agent/replay_buffer: rae
   - override /agent/data_collection: hardware
   - _self_
 
@@ -19,21 +18,17 @@ training:
   safe: false
   train_domain_randomization: false
   eval_domain_randomization: false
-  wandb_id: m8z0z8a9
+  wandb_id: 9tt8ewww
   render: false
 
 agent:
   batch_size: 256
-  min_replay_size: 5000
+  min_replay_size: 250
   max_replay_size: 1048576
   policy_hidden_layer_sizes: [64, 64]
-  grad_updates_per_step: 500
+  grad_updates_per_step: 1250
   learning_rate: 1e-5
   critic_learning_rate: 3e-4
   num_critic_updates_per_actor_update: 20
   data_collection:
     address: tcp://169.254.211.241:5555
-  replay_buffer:
-    wandb_ids:
-      - m8z0z8a9
-    mix: [0.5, 0.0, 10000]

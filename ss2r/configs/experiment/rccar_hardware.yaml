@@ -23,7 +23,7 @@ training:
 
 agent:
   batch_size: 256
-  min_replay_size: 2500
+  min_replay_size: 5000
   max_replay_size: 1048576
   policy_hidden_layer_sizes: [64, 64]
   grad_updates_per_step: 500

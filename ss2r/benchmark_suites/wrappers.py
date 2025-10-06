@@ -156,8 +156,6 @@ class NonEpisodicWrapper(Wrapper):
         }
         state.info["truncation"] = jp.zeros(rng.shape[:-1])
         state.metrics.update(metrics)
-        # Keep separate record of episode done as state.info['done'] can be erased
-        # by AutoResetWrapper
         return state
 
     def step(self, state: State, action: jax.Array) -> State:

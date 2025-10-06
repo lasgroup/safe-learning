@@ -1,7 +1,7 @@
 # @package _global_
 defaults:
   - override /environment: rccar_real
-  - override /agent/replay_buffer: rae
+  - override /agent/data_collection: hardware
   - _self_
 
 environment:
@@ -15,7 +15,7 @@ training:
   num_envs: 1
   num_timesteps: 25000
   episode_length: 250
-  safe: true
+  safe: false
   train_domain_randomization: false
   eval_domain_randomization: false
   wandb_id: 9tt8ewww
@@ -32,7 +32,3 @@ agent:
   num_critic_updates_per_actor_update: 20
   data_collection:
     address: tcp://169.254.211.241:5555
-  replay_buffer:
-    wandb_ids:
-      - 9tt8ewww
-    mix: [0.5, 0.0, 10000]

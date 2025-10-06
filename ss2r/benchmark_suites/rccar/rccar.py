@@ -132,7 +132,7 @@ class RCCar(Env):
     ):
         self.goal = jnp.array([0.0, 0.0, 0.0])
         self.obstacles = obstacles
-        self.init_pose = init_pose
+        self.init_pose = jnp.array(init_pose)
         self.sample_init_pose = sample_init_pose
         self.control_penalty_scale = control_penalty_scale
         self.last_action_penalty_scale = last_action_penalty_scale

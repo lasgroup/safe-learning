@@ -23,12 +23,12 @@ training:
 
 agent:
   batch_size: 256
-  min_replay_size: 250
+  min_replay_size: 1000
   max_replay_size: 1048576
   policy_hidden_layer_sizes: [64, 64]
-  grad_updates_per_step: 1250
+  grad_updates_per_step: 2500
   learning_rate: 1e-5
   critic_learning_rate: 3e-4
-  num_critic_updates_per_actor_update: 20
+  num_critic_updates_per_actor_update: 10
   data_collection:
     address: tcp://169.254.211.241:5555

@@ -169,3 +169,4 @@ data
 artifacts
 paper
 *.sbatch
+*.DS_Store

@@ -8,7 +8,7 @@ from brax import envs
 from omegaconf import OmegaConf
 
 from ss2r import benchmark_suites
-from ss2r.algorithms import mbpo, ppo, sac
+from ss2r.algorithms import mbpo, ppo, sac, sbsrl
 from ss2r.common.logging import TrainingLogger
 from ss2r.common.wandb import get_state_path, get_wandb_checkpoint
 
@@ -71,6 +71,12 @@ def get_train_fn(cfg):
         )
     elif cfg.agent.name == "mbpo":
         train_fn = mbpo.get_train_fn(
+            cfg,
+            restore_checkpoint_path=restore_checkpoint_path,
+            checkpoint_path=get_state_path(),
+        )
+    elif cfg.agent.name == "sbsrl":
+        train_fn = sbsrl.get_train_fn(
             cfg,
             restore_checkpoint_path=restore_checkpoint_path,
             checkpoint_path=get_state_path(),

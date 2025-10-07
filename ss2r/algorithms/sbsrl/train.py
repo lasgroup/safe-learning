@@ -34,10 +34,6 @@ from ml_collections import config_dict
 
 import ss2r.algorithms.sbsrl.losses as sbsrl_losses
 import ss2r.algorithms.sbsrl.networks as sbsrl_networks
-from ss2r.algorithms.sbsrl import safety_filters
-from ss2r.algorithms.sbsrl.model_env import create_model_env
-from ss2r.algorithms.sbsrl.on_policy_training_step import make_on_policy_training_step
-from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 from ss2r.algorithms.penalizers import Params, Penalizer
 from ss2r.algorithms.sac import gradients
 from ss2r.algorithms.sac.data import collect_single_step
@@ -49,6 +45,10 @@ from ss2r.algorithms.sac.types import (
     Transition,
     float16,
 )
+from ss2r.algorithms.sbsrl import safety_filters
+from ss2r.algorithms.sbsrl.model_env import create_model_env
+from ss2r.algorithms.sbsrl.on_policy_training_step import make_on_policy_training_step
+from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 from ss2r.rl.evaluation import ConstraintsEvaluator, InterventionConstraintsEvaluator
 from ss2r.rl.utils import restore_state
 

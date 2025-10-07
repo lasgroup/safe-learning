@@ -7,8 +7,6 @@ from brax.envs.wrappers.training import VmapWrapper
 from brax.training import acting
 from brax.training.types import Policy, PRNGKey
 
-from ss2r.algorithms.sbsrl.model_env import ModelBasedEnv
-from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 from ss2r.algorithms.sac.types import (
     Metrics,
     ReplayBufferState,
@@ -16,6 +14,8 @@ from ss2r.algorithms.sac.types import (
     float16,
     float32,
 )
+from ss2r.algorithms.sbsrl.model_env import ModelBasedEnv
+from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 
 
 def make_on_policy_training_step(

@@ -53,8 +53,10 @@ def make_sooper_filter_fn(
             if deterministic:
                 behavioral_action = mode_a
             else:
-                behavioral_action = sbsrl_networks.parametric_action_distribution.sample(
-                    logits, key_sample
+                behavioral_action = (
+                    sbsrl_networks.parametric_action_distribution.sample(
+                        logits, key_sample
+                    )
                 )
             if sbsrl_networks.qc_network is not None:
                 qc = sbsrl_networks.qc_network.apply(
@@ -119,8 +121,10 @@ def make_advantage_filter_fn(
             if deterministic:
                 behavioral_action = mode_a
             else:
-                behavioral_action = sbsrl_networks.parametric_action_distribution.sample(
-                    logits, key_sample
+                behavioral_action = (
+                    sbsrl_networks.parametric_action_distribution.sample(
+                        logits, key_sample
+                    )
                 )
 
             backup_action = backup_policy(observations, key_sample)[0]
@@ -188,8 +192,10 @@ def make_advantage_filter_g2g_reset_fn(
             if deterministic:
                 behavioral_action = mode_a
             else:
-                behavioral_action = sbsrl_networks.parametric_action_distribution.sample(
-                    logits, key_sample
+                behavioral_action = (
+                    sbsrl_networks.parametric_action_distribution.sample(
+                        logits, key_sample
+                    )
                 )
             linear_velocity = observations["state"][..., -5]
             angular_velocity = observations["state"][..., -3]

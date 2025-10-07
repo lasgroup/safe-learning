@@ -25,9 +25,9 @@ import optax
 from brax.training import types
 from brax.training.types import Params, PRNGKey
 
-from ss2r.algorithms.sbsrl.networks import SBSRLNetworks
 from ss2r.algorithms.penalizers import Penalizer
 from ss2r.algorithms.sac.q_transforms import QTransformation
+from ss2r.algorithms.sbsrl.networks import SBSRLNetworks
 
 Transition: TypeAlias = types.Transition
 

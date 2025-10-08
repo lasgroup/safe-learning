@@ -5,7 +5,7 @@ defaults:
   - data_collection: step
   - penalizer: null
 
-name: sbsrl
+name: mbpo
 learning_rate: 3e-4
 critic_learning_rate: 3e-4
 model_learning_rate: 3e-4
@@ -51,5 +51,6 @@ learn_from_scratch: false
 load_auxiliaries: false
 load_normalizer: true
 target_entropy: null
-
 pure_exploration_steps: null
+training_step_fn: on_policy
+pessimistic_q: false

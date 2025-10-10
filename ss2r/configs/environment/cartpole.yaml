@@ -1,0 +1,17 @@
+defaults:
+  - brax_base
+
+task_name: cartpole_safe
+task_params:
+  sparse: false
+  swingup: false
+  slider_position_bound: 0.25
+
+# Sample uniformly around the nominal value
+train_params:
+  gain: [0, 1]
+  gear: [5., 20.]
+
+eval_params:
+  gain: [0, 1]
+  gear: [5., 20.]

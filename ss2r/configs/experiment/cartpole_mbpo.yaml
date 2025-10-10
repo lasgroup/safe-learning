@@ -1,0 +1,19 @@
+# @package _global_
+defaults:
+  - override /environment: cartpole
+  - override /agent: mbpo
+  - _self_
+
+training:
+  num_timesteps: 150000
+  num_envs: 10
+  safe: false
+  safety_budget: 100
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  
+agent:
+  min_replay_size: 5000
+  sac_batch_size: 512
+  critic_grad_updates_per_step: 20
+  model_grad_updates_per_step: 25

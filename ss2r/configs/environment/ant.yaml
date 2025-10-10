@@ -1,0 +1,27 @@
+defaults:
+  - brax_base
+  - _self_
+
+backend: mjx
+task_name: ant_safe
+task_params:
+  angle_tolerance: 2.
+  use_contact_forces: false
+  contact_cost_weight: 5e-4
+  healthy_reward: 1.0
+  terminate_when_unhealthy: true
+  healthy_z_range: [0.2, 1.0]
+  contact_force_range: [-1.0, 1.0]
+  reset_noise_scale: 0.1
+  exclude_current_positions_from_observation: true
+
+# Sample uniformly around the nominal value
+train_params:
+  friction: [-0.05, 0.05]
+  hip: [-20., 20.]
+  ankle: [-20., 20.]
+
+eval_params:
+  friction: [-0.05, 0.05]
+  hip: [-20., 20.]
+  ankle: [-20., 20.]

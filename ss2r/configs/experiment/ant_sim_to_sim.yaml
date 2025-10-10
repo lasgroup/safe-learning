@@ -1,0 +1,31 @@
+# @package _global_
+defaults:
+  - override /environment: ant
+  - override /agent/cost_robustness: ucb_cost
+  - override /agent/propagation: spidr
+  - _self_
+
+training:
+  num_timesteps: 5000000
+  safe: true
+  num_envs: 256
+  train_domain_randomization: true
+  eval_domain_randomization: true
+  safety_budget: 100.
+  privileged: true
+
+train_params:
+  friction: [-0.05, 0.05]
+  hip: [-20., 20.]
+  ankle: [-20., 20.]
+
+eval_params:
+  friction: [-0.05, 0.05]
+  hip: [-20., 20.]
+  ankle: [-20., 20.]
+
+agent:
+  grad_updates_per_step: 256
+  hidden_layer_sizes: [256, 256, 256]
+  reward_scaling: 5.
+  safety_discounting: 1.

@@ -1,0 +1,47 @@
+# @package _global_
+defaults:
+  - override /environment: humanoid
+  - override /agent/cost_robustness: ucb_cost
+  - override /agent/propagation: spidr
+  - _self_
+
+training:
+  num_timesteps: 5000000
+  safe: true
+  num_envs: 256
+  train_domain_randomization: true
+  eval_domain_randomization: true
+  safety_budget: 100.
+  value_privileged: true
+
+environment:
+  train_params:
+    friction: [-0.0, 0.]
+    gain_hip:
+      x: [0, 2]
+      y: [0, 6]
+      z: [0, 2]
+    gain_knee: [0, 4]
+    gear_hip:
+      x: [0, 0]
+      y: [0, 0]
+      z: [0, 0]
+    gear_knee: [0, 0]
+
+  eval_params:
+    friction: [-0.3, 0.]
+    gain_hip:
+      x: [0., 0.]
+      y: [0., 0.]
+      z: [0., 0.]
+    gain_knee: [0., 0.]
+    gear_hip:
+      x: [0., 20.]
+      y: [0., 60.]
+      z: [0., 20.]
+    gear_knee: [0., 40.]
+
+agent:
+  grad_updates_per_step: 256
+  hidden_layer_sizes: [256, 256, 256]
+  reward_scaling: 5.

@@ -13,20 +13,22 @@ environment:
 
 training:
   num_envs: 1
-  num_timesteps: 1500
+  num_timesteps: 25000
   episode_length: 250
-  safe: true
-  num_evals: 1
+  safe: false
   train_domain_randomization: false
   eval_domain_randomization: false
-  safety_budget: 5.
-  wandb_id: 0ltkzlyo
+  wandb_id: 9tt8ewww
   render: false
 
 agent:
-  min_replay_size: 1250
+  batch_size: 256
+  min_replay_size: 1000
   max_replay_size: 1048576
   policy_hidden_layer_sizes: [64, 64]
-  grad_updates_per_step: 0
+  grad_updates_per_step: 2500
+  learning_rate: 1e-5
+  critic_learning_rate: 3e-4
+  num_critic_updates_per_actor_update: 10
   data_collection:
     address: tcp://169.254.211.241:5555

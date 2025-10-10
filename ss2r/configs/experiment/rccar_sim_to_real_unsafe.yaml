@@ -1,0 +1,29 @@
+# @package _global_
+defaults:
+  - override /environment: rccar_real
+  - override /agent/replay_buffer: pytree
+  - _self_
+
+environment:
+  action_delay: 1
+  observation_delay: 0
+  sliding_window: 5
+  dt: 0.03333333
+  sample_init_pose: true
+  init_pose: [1.42, -1.04, -3.142]
+
+training:
+  num_envs: 4096
+  num_timesteps: 50000000
+  episode_length: 250
+  train_domain_randomization: true
+  eval_domain_randomization: true
+  safe: false
+
+agent:
+  grad_updates_per_step: 64
+  batch_size: 256
+  min_replay_size: 100
+  max_replay_size: 1048576
+  policy_hidden_layer_sizes: [64, 64]
+  store_buffer: true

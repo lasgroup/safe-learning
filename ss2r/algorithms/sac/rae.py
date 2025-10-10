@@ -157,7 +157,7 @@ def prepare_offline_data(wandb_ids, wandb_entity):
     concatenated_data = jax.tree.map(lambda *xs: jnp.concatenate(xs, axis=0), *data)
     concatenated_data = Transition(**concatenated_data)
     key = replay_buffer_state["key"]
-    assert last_position == (concatenated_data.shape[0] - 1)
+    assert last_position == concatenated_data.reward.shape[0]
     return pusq.PytreeReplayBufferState(
         data=concatenated_data,
         insert_position=jnp.array(last_position, dtype=jnp.int32),

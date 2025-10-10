@@ -58,6 +58,8 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
         del agent_cfg["data_collection"]
     if "training_step_fn" in agent_cfg:
         del agent_cfg["training_step_fn"]
+    if "pessimistic_q" in agent_cfg:
+        del agent_cfg["pessimistic_q"]
     if "use_vision" in agent_cfg and agent_cfg["use_vision"]:
         network_factory = functools.partial(
             mbpo_vision_networks.make_mbpo_vision_networks,

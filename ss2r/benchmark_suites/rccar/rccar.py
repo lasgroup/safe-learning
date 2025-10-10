@@ -121,6 +121,7 @@ class RCCar(Env):
         dt: float = 1 / 30.0,
         obstacles: list[tuple[float, float, float]] = [(0.75, -0.75, 0.2)],
         sample_init_pose: bool = True,
+        init_pose: jnp.ndarray = jnp.array([1.42, -1.04, jnp.pi]),
         control_penalty_scale: float = 0.0,
         last_action_penalty_scale: float = 0.0,
         action_delay: int = 0,  # Parameter for action delay
@@ -131,7 +132,7 @@ class RCCar(Env):
     ):
         self.goal = jnp.array([0.0, 0.0, 0.0])
         self.obstacles = obstacles
-        self.init_pose = jnp.array([1.42, -1.04, jnp.pi])
+        self.init_pose = jnp.array(init_pose)
         self.sample_init_pose = sample_init_pose
         self.control_penalty_scale = control_penalty_scale
         self.last_action_penalty_scale = last_action_penalty_scale

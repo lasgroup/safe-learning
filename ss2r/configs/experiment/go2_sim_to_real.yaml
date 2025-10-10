@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - go2_joystick_sac
+  - go2_sim_to_real_sac
   - override /agent/replay_buffer: pytree
   - _self_
   

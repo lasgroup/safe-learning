@@ -1,0 +1,24 @@
+# @package _global_
+defaults:
+  - go2_joystick
+  - override /agent/data_collection: hardware
+  - override /agent/replay_buffer: rae
+  - _self_
+
+training:
+  num_envs: 1
+  num_eval_envs: 1
+  num_timesteps: 25000
+  num_evals: 5
+  render: false
+
+agent:
+  min_replay_size: 1000
+  replay_buffer:
+    wandb_ids:
+      - 3mjz962p
+    mix: [0.5, 0.0, 10000]
+  grad_updates_per_step: 5000
+  learning_rate: 1e-5
+  critic_learning_rate: 3e-4
+  num_critic_updates_per_actor_update: 20

@@ -1,0 +1,16 @@
+# @package _global_
+defaults:
+  - go2_joystick_sac
+  - override /agent/replay_buffer: pytree
+  - _self_
+  
+
+
+training:
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  
+
+agent:
+  n_critics: 2
+  n_heads: 1

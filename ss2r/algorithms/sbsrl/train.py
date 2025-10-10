@@ -34,15 +34,8 @@ from ml_collections import config_dict
 
 import ss2r.algorithms.sbsrl.losses as sbsrl_losses
 import ss2r.algorithms.sbsrl.networks as sbsrl_networks
-from ss2r.algorithms.sbsrl import safety_filters
-from ss2r.algorithms.sbsrl.model_env import create_model_env
-from ss2r.algorithms.sbsrl.on_policy_training_step import make_on_policy_training_step
-from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 from ss2r.algorithms.penalizers import Params, Penalizer
-from ss2r.algorithms.sbsrl import gradients
 from ss2r.algorithms.sac.data import collect_single_step
-from ss2r.algorithms.sac.q_transforms import QTransformation, SACBase, SACCost
-from ss2r.algorithms.sbsrl.q_transforms import SACBaseEnsemble
 from ss2r.algorithms.sac.types import (
     CollectDataFn,
     Metrics,
@@ -50,6 +43,11 @@ from ss2r.algorithms.sac.types import (
     Transition,
     float16,
 )
+from ss2r.algorithms.sbsrl import gradients, safety_filters
+from ss2r.algorithms.sbsrl.model_env import create_model_env
+from ss2r.algorithms.sbsrl.on_policy_training_step import make_on_policy_training_step
+from ss2r.algorithms.sbsrl.q_transforms import QTransformation, SACBaseEnsemble
+from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 from ss2r.rl.evaluation import ConstraintsEvaluator, InterventionConstraintsEvaluator
 from ss2r.rl.utils import restore_state
 
@@ -196,7 +194,7 @@ def train(
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
     reward_q_transform: QTransformation = SACBaseEnsemble(),
-    cost_q_transform: QTransformation = SACCost(),
+    cost_q_transform: QTransformation = SACBaseEnsemble(),
     use_bro: bool = True,
     normalize_budget: bool = True,
     reset_on_eval: bool = True,
@@ -213,6 +211,7 @@ def train(
     load_normalizer: bool = True,
     target_entropy: float | None = None,
     pure_exploration_steps: int | None = None,
+    pessimistic_q: bool = False,
 ):
     if min_replay_size >= num_timesteps:
         raise ValueError(
@@ -270,7 +269,7 @@ def train(
         n_critics=n_critics,
         n_heads=n_heads,
         ensemble_size=model_ensemble_size,
-        embedding_dim=model_ensemble_size
+        embedding_dim=model_ensemble_size,
     )
     alpha_optimizer = optax.adam(learning_rate=alpha_learning_rate)
     make_optimizer = lambda lr, grad_clip_norm: optax.chain(
@@ -336,7 +335,7 @@ def train(
         dummy_data_sample=dummy_transition,
         sample_batch_size=batch_size * model_grad_updates_per_step,
     )
-    
+
     sac_extras = {
         "state_extras": {
             "truncation": jnp.zeros((model_ensemble_size,)),
@@ -456,10 +455,8 @@ def train(
             alpha_loss, alpha_optimizer, pmap_axis_name=None
         )
     )
-    critic_update = (
-        gradients.ensemble_gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
-            critic_loss, qr_optimizer, pmap_axis_name=None
-        )
+    critic_update = gradients.ensemble_gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
+        critic_loss, qr_optimizer, pmap_axis_name=None
     )
     if safe:
         cost_critic_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray

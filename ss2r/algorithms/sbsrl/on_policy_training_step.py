@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -7,8 +7,6 @@ from brax.envs.wrappers.training import VmapWrapper
 from brax.training import acting
 from brax.training.types import Policy, PRNGKey
 
-from ss2r.algorithms.sbsrl.model_env import ModelBasedEnv
-from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 from ss2r.algorithms.sac.types import (
     Metrics,
     ReplayBufferState,
@@ -16,6 +14,8 @@ from ss2r.algorithms.sac.types import (
     float16,
     float32,
 )
+from ss2r.algorithms.sbsrl.model_env import ModelBasedEnv
+from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 
 
 def make_on_policy_training_step(
@@ -276,17 +276,15 @@ def make_on_policy_training_step(
 
         if unroll_length != 1:
             raise ValueError("Unrolls with more than one step not supported")
-        state = planning_env.reset(rollout_keys) #one-step rollout
+        state = planning_env.reset(rollout_keys)  # one-step rollout
         _, transitions = acting.actor_step(
-            planning_env,
-            state,
-            policy,
-            key_generate_unroll,
-            extra_fields=extra_fields
+            planning_env, state, policy, key_generate_unroll, extra_fields=extra_fields
         )
-        #transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), transitions) #don't need it anymore as we don't have unroll_length dimension
-        sac_replay_buffer_state = sac_replay_buffer.insert(sac_replay_buffer_state, float16(transitions))
-        
+        # transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), transitions) #don't need it anymore as we don't have unroll_length dimension
+        sac_replay_buffer_state = sac_replay_buffer.insert(
+            sac_replay_buffer_state, float16(transitions)
+        )
+
         return sac_replay_buffer_state
 
     def training_step(
@@ -354,7 +352,7 @@ def make_on_policy_training_step(
         transitions = model_transitions
         shapes = jax.tree_map(lambda x: jnp.asarray(x).shape, transitions)
         print("Transitions shapes:", shapes)
-        transitions = jax.tree_util.tree_map( #TODO: this should be ok as it only acts one the batch dimension, which is the leading one
+        transitions = jax.tree_util.tree_map(  # TODO: this should be ok as it only acts one the batch dimension, which is the leading one
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),
             transitions,
         )
@@ -380,7 +378,7 @@ def make_on_policy_training_step(
         metrics = {**model_metrics, **critic_metrics, **actor_metrics}
         metrics["buffer_current_size"] = model_replay_buffer.size(model_buffer_state)
         metrics |= env_state.metrics
-        metrics |= more_metrics
+        # metrics |= more_metrics
         return (
             training_state,
             env_state,

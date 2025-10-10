@@ -25,9 +25,9 @@ import optax
 from brax.training import types
 from brax.training.types import Params, PRNGKey
 
-from ss2r.algorithms.sbsrl.networks import SBSRLNetworks
 from ss2r.algorithms.penalizers import Penalizer
-from ss2r.algorithms.sac.q_transforms import QTransformation
+from ss2r.algorithms.sbsrl.networks import SBSRLNetworks
+from ss2r.algorithms.sbsrl.q_transforms import SACBaseEnsemble
 
 Transition: TypeAlias = types.Transition
 
@@ -77,14 +77,18 @@ def make_losses(
         alpha: jnp.ndarray,
         transitions: Transition,
         key: PRNGKey,
-        target_q_fn: QTransformation,
+        target_q_fn: SACBaseEnsemble,
         safe: bool = False,
     ) -> jnp.ndarray:
         action = transitions.action
         scale = cost_scaling if safe else reward_scaling
         gamma = safety_discounting if safe else discounting
         q_old_action = qr_network.apply(
-            normalizer_params, q_params, transitions.observation, action, transitions.extras['state_extras']['idx']
+            normalizer_params,
+            q_params,
+            transitions.observation,
+            action,
+            transitions.extras["state_extras"]["idx"],
         )
         key, another_key = jax.random.split(key)
 
@@ -140,7 +144,7 @@ def make_losses(
         )
         log_prob = parametric_action_distribution.log_prob(dist_params, action)
         action = parametric_action_distribution.postprocess(action)
-        qr_action = qr_network.apply( #TODO: here I need to decide an i or loop over i and take the mean
+        qr_action = qr_network.apply(  # TODO: here I need to decide an i or loop over i and take the mean
             normalizer_params, qr_params, transitions.observation, action
         )
         if use_bro:

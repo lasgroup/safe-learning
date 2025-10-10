@@ -84,7 +84,7 @@ def make_losses(
         scale = cost_scaling if safe else reward_scaling
         gamma = safety_discounting if safe else discounting
         q_old_action = qr_network.apply(
-            normalizer_params, q_params, transitions.observation, action
+            normalizer_params, q_params, transitions.observation, action, transitions.extras['state_extras']['idx']
         )
         key, another_key = jax.random.split(key)
 
@@ -101,8 +101,8 @@ def make_losses(
             next_action = parametric_action_distribution.postprocess(next_action)
             return next_action, next_log_prob
 
-        q_fn = lambda obs, action: qr_network.apply(
-            normalizer_params, target_q_params, obs, action
+        q_fn = lambda obs, action, idx: qr_network.apply(
+            normalizer_params, target_q_params, obs, action, idx
         )
         target_q = target_q_fn(
             transitions,
@@ -140,7 +140,7 @@ def make_losses(
         )
         log_prob = parametric_action_distribution.log_prob(dist_params, action)
         action = parametric_action_distribution.postprocess(action)
-        qr_action = qr_network.apply(
+        qr_action = qr_network.apply( #TODO: here I need to decide an i or loop over i and take the mean
             normalizer_params, qr_params, transitions.observation, action
         )
         if use_bro:

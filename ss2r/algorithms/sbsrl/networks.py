@@ -14,7 +14,7 @@
 
 """SBSRL networks."""
 
-from typing import Any, Callable, Protocol, Sequence, TypeVar
+from typing import Any, Callable, Mapping, Protocol, Sequence, TypeVar
 
 import brax.training.agents.sac.networks as sac_networks
 import flax
@@ -24,7 +24,7 @@ import jax.numpy as jnp
 from brax.training import distribution, networks, types
 from flax import linen
 
-from ss2r.algorithms.sac.networks import make_q_network
+from ss2r.algorithms.sac.networks import make_q_network, MLP, BroNet
 
 ActivationFn = Callable[[jnp.ndarray], jnp.ndarray]
 Initializer = Callable[..., Any]
@@ -118,6 +118,69 @@ def make_world_model_ensemble(
     )
     return net
 
+def _get_obs_state_size(obs_size: types.ObservationSize, obs_key: str) -> int:
+    obs_size = obs_size[obs_key] if isinstance(obs_size, Mapping) else obs_size
+    return jax.tree_util.tree_flatten(obs_size)[0][-1]
+
+def make_q_network_ensemble(
+    obs_size: types.ObservationSize,
+    action_size: int,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
+    hidden_layer_sizes: Sequence[int] = (256, 256),
+    activation: ActivationFn = linen.relu,
+    n_critics: int = 2,
+    obs_key: str = "state",
+    use_bro: bool = True,
+    n_heads: int = 1,
+    head_size: int = 1,
+    ensemble_size: int = 10,
+    embedding_dim: int = 4
+) -> networks.FeedForwardNetwork:
+    """Creates a value network."""
+
+    class QModule(linen.Module):
+        """Q Module."""
+
+        n_critics: int
+
+        @linen.compact
+        def __call__(self, obs: jnp.ndarray, actions: jnp.ndarray, idx):
+            idx = idx.astype(jnp.int32)
+            embed = linen.Embed(num_embeddings=ensemble_size, features=embedding_dim, name="ensemble_embed")
+            idx_emb = embed(idx)
+            if idx_emb.ndim > obs.ndim:
+                idx_emb = jnp.reshape(idx_emb, obs.shape[:-1] + (embedding_dim,))
+
+            hidden = jnp.concatenate([obs, actions, idx_emb], axis=-1)
+            
+            res = []
+            net = BroNet if use_bro else MLP
+            for _ in range(self.n_critics):
+                q = net(  # type: ignore
+                    layer_sizes=list(hidden_layer_sizes) + [head_size],
+                    activation=activation,
+                    kernel_init=jax.nn.initializers.lecun_uniform(),
+                    num_heads=n_heads,
+                )(hidden)
+                res.append(q)
+            return jnp.concatenate(res, axis=-1)
+
+    q_module = QModule(n_critics=n_critics)
+
+    def apply(processor_params, q_params, obs, actions, idx):
+        obs = preprocess_observations_fn(obs, processor_params)
+        obs = obs if isinstance(obs, jax.Array) else obs[obs_key]
+        idx = jnp.asarray(idx, dtype=jnp.int32)
+        return q_module.apply(q_params, obs, actions, idx)
+
+    obs_size = _get_obs_state_size(obs_size, obs_key)
+    dummy_obs = jnp.zeros((1, obs_size))
+    dummy_action = jnp.zeros((1, action_size))
+    dummy_idx = jnp.zeros((1,), dtype=jnp.int32)
+    return networks.FeedForwardNetwork(
+        init=lambda key: q_module.init(key, dummy_obs, dummy_action, dummy_idx), apply=apply
+    )
+
 
 def make_sbsrl_networks(
     observation_size: types.ObservationSize,
@@ -134,6 +197,8 @@ def make_sbsrl_networks(
     n_critics: int = 2,
     n_heads: int = 1,
     safe: bool = False,
+    ensemble_size: int = 10,
+    embedding_dim: int = 4
 ) -> SBSRLNetworks:
     parametric_action_distribution = distribution.NormalTanhDistribution(
         event_size=action_size
@@ -146,7 +211,7 @@ def make_sbsrl_networks(
         activation=activation,
         obs_key=policy_obs_key,
     )
-    qr_network = make_q_network(
+    qr_network = make_q_network_ensemble(
         observation_size,
         action_size,
         preprocess_observations_fn=preprocess_observations_fn,
@@ -156,9 +221,11 @@ def make_sbsrl_networks(
         use_bro=use_bro,
         n_critics=n_critics,
         n_heads=n_heads,
+        ensemble_size=ensemble_size,
+        embedding_dim=embedding_dim
     )
     if safe:
-        qc_network = make_q_network(
+        qc_network = make_q_network_ensemble(
             observation_size,
             action_size,
             preprocess_observations_fn=preprocess_observations_fn,
@@ -168,6 +235,8 @@ def make_sbsrl_networks(
             use_bro=use_bro,
             n_critics=n_critics,
             n_heads=n_heads,
+            ensemble_size=ensemble_size,
+            embedding_dim=embedding_dim
         )
         old_apply = qc_network.apply
         qc_network.apply = lambda *args, **kwargs: jnn.softplus(

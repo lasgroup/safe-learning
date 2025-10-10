@@ -39,9 +39,10 @@ from ss2r.algorithms.sbsrl.model_env import create_model_env
 from ss2r.algorithms.sbsrl.on_policy_training_step import make_on_policy_training_step
 from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 from ss2r.algorithms.penalizers import Params, Penalizer
-from ss2r.algorithms.sac import gradients
+from ss2r.algorithms.sbsrl import gradients
 from ss2r.algorithms.sac.data import collect_single_step
 from ss2r.algorithms.sac.q_transforms import QTransformation, SACBase, SACCost
+from ss2r.algorithms.sbsrl.q_transforms import SACBaseEnsemble
 from ss2r.algorithms.sac.types import (
     CollectDataFn,
     Metrics,
@@ -185,6 +186,7 @@ def train(
     n_critics: int = 2,
     n_heads: int = 1,
     model_ensemble_size: int = 1,
+    embedding_dim: int = 4,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     checkpoint_logdir: Optional[str] = None,
     restore_checkpoint_path: Optional[str] = None,
@@ -193,7 +195,7 @@ def train(
     safety_budget: float = float("inf"),
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
-    reward_q_transform: QTransformation = SACBase(),
+    reward_q_transform: QTransformation = SACBaseEnsemble(),
     cost_q_transform: QTransformation = SACCost(),
     use_bro: bool = True,
     normalize_budget: bool = True,
@@ -267,6 +269,8 @@ def train(
         use_bro=use_bro,
         n_critics=n_critics,
         n_heads=n_heads,
+        ensemble_size=model_ensemble_size,
+        embedding_dim=model_ensemble_size
     )
     alpha_optimizer = optax.adam(learning_rate=alpha_learning_rate)
     make_optimizer = lambda lr, grad_clip_norm: optax.chain(
@@ -332,9 +336,27 @@ def train(
         dummy_data_sample=dummy_transition,
         sample_batch_size=batch_size * model_grad_updates_per_step,
     )
+    
+    sac_extras = {
+        "state_extras": {
+            "truncation": jnp.zeros((model_ensemble_size,)),
+        },
+        "policy_extras": {},
+    }
+    if safe:
+        sac_extras["state_extras"]["cost"] = jnp.zeros((model_ensemble_size,))  # type: ignore
+    dummy_transition_sac = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
+        observation=dummy_obs,
+        action=dummy_action,
+        reward=jnp.zeros((model_ensemble_size,)),
+        discount=jnp.zeros((model_ensemble_size,)),
+        next_observation=jnp.zeros((model_ensemble_size, obs_size)),
+        extras=sac_extras,
+    )
+    dummy_transition_sac = float16(dummy_transition_sac)
     sac_replay_buffer = replay_buffers.UniformSamplingQueue(
         max_replay_size=max_replay_size,
-        dummy_data_sample=dummy_transition,
+        dummy_data_sample=dummy_transition_sac,
         sample_batch_size=sac_batch_size * critic_grad_updates_per_step,
     )
     model_buffer_state = model_replay_buffer.init(model_rb_key)
@@ -435,7 +457,7 @@ def train(
         )
     )
     critic_update = (
-        gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
+        gradients.ensemble_gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
             critic_loss, qr_optimizer, pmap_axis_name=None
         )
     )

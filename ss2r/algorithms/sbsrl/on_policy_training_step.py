@@ -273,114 +273,21 @@ def make_on_policy_training_step(
         key = keys[0]
         key_generate_unroll = keys[1]
         rollout_keys = keys[2:]
-        state = planning_env.reset(rollout_keys)
-        _, transitions = acting.generate_unroll(
+
+        if unroll_length != 1:
+            raise ValueError("Unrolls with more than one step not supported")
+        state = planning_env.reset(rollout_keys) #one-step rollout
+        _, transitions = acting.actor_step(
             planning_env,
             state,
             policy,
             key_generate_unroll,
-            unroll_length,
-            extra_fields=extra_fields,
+            extra_fields=extra_fields
         )
-        transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), transitions)
-        sac_replay_buffer_state = sac_replay_buffer.insert(
-            sac_replay_buffer_state, float16(transitions)
-        )
+        #transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), transitions) #don't need it anymore as we don't have unroll_length dimension
+        sac_replay_buffer_state = sac_replay_buffer.insert(sac_replay_buffer_state, float16(transitions))
+        
         return sac_replay_buffer_state
-
-    def relabel_transitions(
-        planning_env: ModelBasedEnv,
-        transitions: Transition,
-        training_step: int,
-    ) -> Tuple[Transition, Dict[str, Any]]:
-        pred_fn = planning_env.model_network.apply
-        model_params = planning_env.model_params
-        normalizer_params = planning_env.normalizer_params
-        vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
-        next_obs_pred, reward, cost = vmap_pred_fn(
-            normalizer_params, model_params, transitions.observation, transitions.action
-        )
-
-        pred_backup_action = planning_env.policy_network.apply
-        backup_policy_params = planning_env.backup_policy_params
-        backup_action = pred_backup_action(
-            normalizer_params, backup_policy_params, transitions.observation
-        )[..., : planning_env.action_size]
-        disagreement = (
-            next_obs_pred.std(axis=0).mean(-1)
-            if isinstance(next_obs_pred, jax.Array)
-            else next_obs_pred["state"].std(axis=0).mean(-1)
-        )
-        new_reward = reward.mean(0) + disagreement * optimism
-        if pure_exploration_steps is not None:
-            new_reward = jnp.where(
-                training_step < pure_exploration_steps,
-                disagreement * optimism,
-                new_reward,
-            )
-        discount = transitions.discount
-        metrics = {"disagreement": disagreement}
-        if safe:
-            cost = cost.mean(0) + disagreement * pessimism
-            transitions.extras["state_extras"]["cost"] = cost
-            if (planning_env.qc_network is not None) and use_termination:
-                if safety_filter == "sooper":
-                    qc_pred = planning_env.qc_network.apply(
-                        normalizer_params,
-                        planning_env.backup_qc_params,
-                        transitions.observation,
-                        transitions.action,
-                    )
-                    expected_total_cost = (
-                        scaling_fn(qc_pred.mean(axis=-1))
-                        + transitions.observation["cumulative_cost"].squeeze()
-                    )
-                    discount = jnp.where(
-                        expected_total_cost > planning_env.safety_budget,
-                        jnp.zeros_like(cost, dtype=jnp.float32),
-                        jnp.ones_like(cost, dtype=jnp.float32),
-                    )
-                    pred_qr = planning_env.qr_network.apply
-                    backup_qr_params = planning_env.backup_qr_params
-                    pessimistic_qr_pred = pred_qr(
-                        normalizer_params,
-                        backup_qr_params,
-                        transitions.observation,
-                        backup_action,
-                    ).mean(axis=-1)
-                    new_reward = jnp.where(discount, new_reward, pessimistic_qr_pred)
-                    metrics["pessimistic_qr_pred"] = pessimistic_qr_pred
-                elif safety_filter in ["advantage", "advantage_g2g_reset"]:
-                    qc_backup = planning_env.qc_network.apply(
-                        normalizer_params,
-                        planning_env.backup_qc_params,
-                        transitions.observation,
-                        backup_action,
-                    ).mean(axis=-1)
-                    qc_behavioral = planning_env.qc_network.apply(
-                        normalizer_params,
-                        planning_env.backup_qc_params,
-                        transitions.observation,
-                        transitions.action,
-                    ).mean(axis=-1)
-                    advantage = qc_behavioral - qc_backup
-                    discount = jnp.where(
-                        advantage > planning_env.safety_budget,
-                        jnp.zeros_like(cost, dtype=jnp.float32),
-                        jnp.ones_like(cost, dtype=jnp.float32),
-                    )
-                    new_reward = jnp.where(
-                        discount, new_reward, jnp.zeros_like(new_reward)
-                    )
-        next_obs_pred = jax.tree_map(lambda x: x.mean(0), next_obs_pred)
-        return Transition(
-            observation=transitions.observation,
-            next_observation=next_obs_pred,
-            action=transitions.action,
-            reward=new_reward,
-            discount=discount,
-            extras=transitions.extras,
-        ), metrics
 
     def training_step(
         training_state: TrainingState,
@@ -430,27 +337,30 @@ def make_on_policy_training_step(
         )
         # Train SAC with model data
         sac_buffer_state, model_transitions = sac_replay_buffer.sample(sac_buffer_state)
-        num_real_transitions = int(
-            model_transitions.reward.shape[0] * (1 - model_to_real_data_ratio)
-        )
-        assert (
-            num_real_transitions <= transitions.reward.shape[0]
-        ), "More model minibatches than real minibatches"
-        if num_real_transitions >= 1:
-            transitions = jax.tree_util.tree_map(
-                lambda x, y: x.at[:num_real_transitions].set(y[:num_real_transitions]),
-                model_transitions,
-                transitions,
-            )
-        else:
-            transitions = model_transitions
-        transitions = jax.tree_util.tree_map(
+        # num_real_transitions = int(
+        #     model_transitions.reward.shape[0] * (1 - model_to_real_data_ratio)
+        # )
+        # assert (
+        #     num_real_transitions <= transitions.reward.shape[0]
+        # ), "More model minibatches than real minibatches"
+        # if num_real_transitions >= 1:
+        #     transitions = jax.tree_util.tree_map(
+        #         lambda x, y: x.at[:num_real_transitions].set(y[:num_real_transitions]),
+        #         model_transitions,
+        #         transitions, #TODO: here it merges model transitions with real transitions, so if we have multiple model transitions but only one real we should create multiple mixed transitions?
+        #     )
+        # else:
+        #     transitions = model_transitions
+        transitions = model_transitions
+        shapes = jax.tree_map(lambda x: jnp.asarray(x).shape, transitions)
+        print("Transitions shapes:", shapes)
+        transitions = jax.tree_util.tree_map( #TODO: this should be ok as it only acts one the batch dimension, which is the leading one
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),
             transitions,
         )
-        transitions, more_metrics = relabel_transitions(
-            planning_env, transitions, training_state.env_steps
-        )
+        # transitions, more_metrics = relabel_transitions(
+        #     planning_env, transitions, training_state.env_steps
+        # )
         (training_state, _), critic_metrics = jax.lax.scan(
             critic_sgd_step, (training_state, training_key), transitions
         )

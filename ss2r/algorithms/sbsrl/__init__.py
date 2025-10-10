@@ -5,10 +5,16 @@ import ss2r.algorithms.sbsrl.vision_networks as sbsrl_vision_networks
 from ss2r.algorithms.sbsrl import on_policy_training_step
 from ss2r.algorithms.penalizers import get_penalizer
 from ss2r.algorithms.sac.data import get_collection_fn
+<<<<<<< Updated upstream
 from ss2r.algorithms.sac.q_transforms import (
     get_cost_q_transform,
     get_reward_q_transform,
 )
+=======
+from ss2r.algorithms.sac.q_transforms import get_cost_q_transform
+from ss2r.algorithms.sbsrl.q_transforms import get_reward_q_transform
+from ss2r.algorithms.sbsrl import on_policy_training_step
+>>>>>>> Stashed changes
 
 
 def get_training_step_fn(cfg):

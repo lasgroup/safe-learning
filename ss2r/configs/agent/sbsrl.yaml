@@ -37,12 +37,12 @@ reset_on_eval: true
 store_buffer: false
 n_critics: 2
 n_heads: 1
-model_ensemble_size: 5
+model_ensemble_size: 10
 unroll_length: 1
 num_model_rollouts: 400
 optimism: 0.
 pessimism: 0.
-model_propagation: random
+model_propagation: all
 use_termination: true
 safety_filter: null
 advantage_threshold: 0.2

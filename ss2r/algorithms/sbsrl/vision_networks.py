@@ -7,7 +7,6 @@ import numpy as np
 from brax.training import distribution, networks, types
 from flax import linen
 
-from ss2r.algorithms.sbsrl.networks import SBSRLNetworks, make_world_model_ensemble
 from ss2r.algorithms.sac.networks import (
     MLP,
     ActivationFn,
@@ -15,6 +14,7 @@ from ss2r.algorithms.sac.networks import (
     SafeSACNetworks,
 )
 from ss2r.algorithms.sac.vision_networks import Encoder
+from ss2r.algorithms.sbsrl.networks import SBSRLNetworks, make_world_model_ensemble
 
 
 def make_vision_world_model_ensemble(

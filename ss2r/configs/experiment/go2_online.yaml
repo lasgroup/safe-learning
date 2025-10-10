@@ -3,6 +3,7 @@ defaults:
   - go2_joystick
   - override /agent/data_collection: hardware
   - override /agent/replay_buffer: rae
+  - override /agent/penalizer: null
   - _self_
 
 training:
@@ -11,6 +12,8 @@ training:
   num_timesteps: 25000
   num_evals: 5
   render: false
+  wandb_id: 66pxygd5
+  safe: false
 
 agent:
   min_replay_size: 1000

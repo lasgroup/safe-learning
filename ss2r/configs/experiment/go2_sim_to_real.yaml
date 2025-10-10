@@ -2,6 +2,7 @@
 defaults:
   - go2_sim_to_real_sac
   - override /agent/replay_buffer: pytree
+  - override /agent/penalizer: null
   - _self_
   
 

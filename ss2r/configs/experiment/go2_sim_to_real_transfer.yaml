@@ -9,6 +9,7 @@ defaults:
 training:
   train_domain_randomization: false
   eval_domain_randomization: true
+  num_eval_envs: 128
   wandb_id: 2qjg8bz5
   
 agent:

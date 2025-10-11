@@ -12,7 +12,7 @@ training:
   num_timesteps: 25000
   num_evals: 5
   render: false
-  wandb_id: 66pxygd5
+  wandb_id: rbs11q2h
   safe: false
   episode_length: 250
 
@@ -20,7 +20,7 @@ agent:
   min_replay_size: 250
   replay_buffer:
     wandb_ids:
-      - 3mjz962p
+      - rbs11q2h
     mix: [0.5, 0.0, 10000]
   grad_updates_per_step: 1250
   learning_rate: 1e-5

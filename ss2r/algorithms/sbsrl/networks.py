@@ -148,8 +148,7 @@ def make_q_network_ensemble(
         n_critics: int
 
         @linen.compact
-        def __call__(self, obs: jnp.ndarray, actions: jnp.ndarray, idx):
-            idx = idx.astype(jnp.int32)
+        def __call__(self, obs: jnp.ndarray, actions: jnp.ndarray, idx: jnp.ndarray):
             embed = linen.Embed(
                 num_embeddings=ensemble_size,
                 features=embedding_dim,

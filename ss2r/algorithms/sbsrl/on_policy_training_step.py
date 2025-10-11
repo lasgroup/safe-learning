@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Any, Dict, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -55,6 +55,55 @@ def make_on_policy_training_step(
     offline,
     pure_exploration_steps,
 ) -> TrainingStepFn:
+    def split_transitions_ensemble(
+        transitions: Transition, ensemble_axis: int = 1
+    ) -> Transition:  # TODO: add types
+        ref = (
+            transitions.next_observation
+            if hasattr(transitions, "next_observation")
+            else jax.tree_util.tree_leaves(transitions)[0]
+        )
+        ref = jnp.asarray(ref)
+        if ref.ndim <= ensemble_axis:
+            raise ValueError(
+                f"Reference leaf has ndim {ref.ndim} <= ensemble_axis {ensemble_axis}"
+            )
+
+        E = ref.shape[ensemble_axis]
+
+        def _per_ens_leaf(x):
+            x = jnp.asarray(x)
+            if x.ndim > ensemble_axis and x.shape[ensemble_axis] == E:
+                perm = list(range(x.ndim))
+                perm.pop(ensemble_axis)
+                perm = [ensemble_axis] + perm
+                return jnp.transpose(x, axes=perm)
+            else:  # no ensemble axis
+                expanded = jnp.expand_dims(x, axis=0)  # (1, U, B, ...)
+                target_shape = (E,) + x.shape
+                return jnp.broadcast_to(expanded, target_shape)
+
+        trans_per_ens = jax.tree_util.tree_map(_per_ens_leaf, transitions)
+
+        sample_leaf = jax.tree_util.tree_leaves(trans_per_ens)[0]
+        slshape = sample_leaf.shape
+        B = int(slshape[1])
+        idx = jnp.arange(E, dtype=jnp.int32)[:, None, None]  # (E,1,1)
+        idx = jnp.broadcast_to(idx, (E, B, 1))  # (E,B,1)
+
+        def _update_extras_map(extras):
+            extras_dict = dict(extras)
+            state_extras = dict(extras_dict.get("state_extras", {}))
+            state_extras["idx"] = idx
+            extras_dict["state_extras"] = state_extras
+            return extras_dict
+
+        orig_extras = trans_per_ens.extras
+        new_extras = _update_extras_map(orig_extras)
+
+        new_trans = trans_per_ens._replace(extras=new_extras)
+        return new_trans
+
     def critic_sgd_step(
         carry: Tuple[TrainingState, PRNGKey], transitions: Transition
     ) -> Tuple[Tuple[TrainingState, PRNGKey], Metrics]:
@@ -62,66 +111,56 @@ def make_on_policy_training_step(
         key, key_critic = jax.random.split(key)
         transitions = float32(transitions)
         alpha = jnp.exp(training_state.alpha_params) + min_alpha
-        critic_loss, behavior_qr_params, behavior_qr_optimizer_state = critic_update(
-            training_state.behavior_qr_params,
-            training_state.behavior_policy_params,
-            training_state.normalizer_params,
-            training_state.behavior_target_qr_params,
-            alpha,
-            transitions,
-            key_critic,
-            reward_q_transform,
-            optimizer_state=training_state.behavior_qr_optimizer_state,
-            params=training_state.behavior_qr_params,
+
+        trans_per_ens = split_transitions_ensemble(transitions, ensemble_axis=1)
+
+        sample_leaf = jax.tree_util.tree_leaves(trans_per_ens)[0]
+        E = int(jnp.asarray(sample_leaf).shape[0])
+        _unused, *ens_keys = jax.random.split(key_critic, E + 1)
+        ens_keys = jnp.stack(ens_keys)  # shape (E, 2)
+
+        def _scan_body(carry, elems):
+            """
+            carry: (params, opt_state)
+            elems: (trans_single, key_i)
+            """
+            params, opt_state = carry
+            trans_single, key_i = elems
+
+            loss_i, new_params, new_opt_state = critic_update(
+                params,
+                training_state.behavior_policy_params,
+                training_state.normalizer_params,
+                training_state.behavior_target_qr_params,
+                alpha,
+                trans_single,
+                key_i,
+                reward_q_transform,
+                optimizer_state=opt_state,
+                params=params,
+            )
+            carry_out = (new_params, new_opt_state)
+            return carry_out, loss_i
+
+        elems = (trans_per_ens, ens_keys)
+        (
+            (behavior_qr_params, behavior_qr_optimizer_state),
+            ensemble_losses,
+        ) = jax.lax.scan(
+            _scan_body,
+            (
+                training_state.behavior_qr_params,
+                training_state.behavior_qr_optimizer_state,
+            ),
+            elems,
+            length=E,
         )
+        critic_loss = jnp.mean(ensemble_losses)
+
         if safe:
-            cost_metrics = {}
-            if safety_filter is not None:
-                (
-                    backup_cost_critic_loss,
-                    backup_qc_params,
-                    backup_qc_optimizer_state,
-                ) = cost_critic_update(
-                    training_state.backup_qc_params,
-                    training_state.backup_policy_params,
-                    training_state.normalizer_params,
-                    training_state.backup_target_qc_params,
-                    alpha,
-                    transitions,
-                    key_critic,
-                    cost_q_transform,
-                    True,
-                    optimizer_state=training_state.backup_qc_optimizer_state,
-                    params=training_state.backup_qc_params,
-                )
-                cost_metrics["backup_cost_critic_loss"] = backup_cost_critic_loss
-            else:
-                backup_qc_params = training_state.backup_qc_params
-                backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
-            if penalizer is not None:
-                (
-                    behavior_cost_critic_loss,
-                    behavior_qc_params,
-                    behavior_qc_optimizer_state,
-                ) = cost_critic_update(
-                    training_state.behavior_qc_params,
-                    training_state.behavior_policy_params,
-                    training_state.normalizer_params,
-                    training_state.behavior_target_qc_params,
-                    alpha,
-                    transitions,
-                    key_critic,
-                    cost_q_transform,
-                    True,
-                    optimizer_state=training_state.behavior_qc_optimizer_state,
-                    params=training_state.behavior_qc_params,
-                )
-                cost_metrics["behavior_cost_critic_loss"] = behavior_cost_critic_loss
-            else:
-                behavior_qc_params = training_state.behavior_qc_params
-                behavior_qc_optimizer_state = training_state.behavior_qc_optimizer_state
+            raise Exception("not yet implemented for safety")
         else:
-            cost_metrics = {}
+            cost_metrics: Dict[str, Any] = {}
             backup_qc_params = training_state.backup_qc_params
             backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
             behavior_qc_params = training_state.behavior_qc_params
@@ -134,15 +173,7 @@ def make_on_policy_training_step(
             training_state.behavior_target_qr_params, behavior_qr_params
         )
         if safe:
-            new_backup_target_qc_params = polyak(
-                training_state.backup_target_qc_params, backup_qc_params
-            )
-            if penalizer is not None:
-                new_behavior_target_qc_params = polyak(
-                    training_state.behavior_target_qc_params, behavior_qc_params
-                )
-            else:
-                new_behavior_target_qc_params = training_state.behavior_target_qc_params
+            raise Exception("not yet implemented for safety")
         else:
             new_backup_target_qc_params = training_state.backup_target_qc_params
             new_behavior_target_qc_params = training_state.behavior_target_qc_params
@@ -161,7 +192,7 @@ def make_on_policy_training_step(
             backup_qc_optimizer_state=backup_qc_optimizer_state,
             backup_qc_params=backup_qc_params,
             backup_target_qc_params=new_backup_target_qc_params,
-            gradient_steps=training_state.gradient_steps + 1,
+            gradient_steps=training_state.gradient_steps + E,
         )
         return (new_training_state, key), metrics
 
@@ -335,30 +366,11 @@ def make_on_policy_training_step(
         )
         # Train SAC with model data
         sac_buffer_state, model_transitions = sac_replay_buffer.sample(sac_buffer_state)
-        # num_real_transitions = int(
-        #     model_transitions.reward.shape[0] * (1 - model_to_real_data_ratio)
-        # )
-        # assert (
-        #     num_real_transitions <= transitions.reward.shape[0]
-        # ), "More model minibatches than real minibatches"
-        # if num_real_transitions >= 1:
-        #     transitions = jax.tree_util.tree_map(
-        #         lambda x, y: x.at[:num_real_transitions].set(y[:num_real_transitions]),
-        #         model_transitions,
-        #         transitions, #TODO: here it merges model transitions with real transitions, so if we have multiple model transitions but only one real we should create multiple mixed transitions?
-        #     )
-        # else:
-        #     transitions = model_transitions
         transitions = model_transitions
-        shapes = jax.tree_map(lambda x: jnp.asarray(x).shape, transitions)
-        print("Transitions shapes:", shapes)
-        transitions = jax.tree_util.tree_map(  # TODO: this should be ok as it only acts one the batch dimension, which is the leading one
+        transitions = jax.tree_util.tree_map(
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),
             transitions,
         )
-        # transitions, more_metrics = relabel_transitions(
-        #     planning_env, transitions, training_state.env_steps
-        # )
         (training_state, _), critic_metrics = jax.lax.scan(
             critic_sgd_step, (training_state, training_key), transitions
         )
@@ -378,7 +390,6 @@ def make_on_policy_training_step(
         metrics = {**model_metrics, **critic_metrics, **actor_metrics}
         metrics["buffer_current_size"] = model_replay_buffer.size(model_buffer_state)
         metrics |= env_state.metrics
-        # metrics |= more_metrics
         return (
             training_state,
             env_state,

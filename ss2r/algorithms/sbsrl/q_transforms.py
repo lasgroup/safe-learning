@@ -11,6 +11,17 @@ def get_reward_q_transform(cfg):
     return SACBaseEnsemble(pessimistic_q=pessimistic_q)
 
 
+def get_cost_q_transform(cfg):
+    if (
+        "cost_robustness" not in cfg.agent
+        or cfg.agent.cost_robustness is None
+        or cfg.agent.cost_robustness.name == "neutral"
+    ):
+        return SACCostEnsemble()
+    else:
+        raise ValueError("Unknown robustness")
+
+
 class QTransformation(Protocol):
     def __call__(
         self,
@@ -52,5 +63,30 @@ class SACBaseEnsemble(QTransformation):
         next_v -= alpha * next_log_prob
         target_q = jax.lax.stop_gradient(
             transitions.reward * scale + transitions.discount * gamma * next_v
+        )
+        return target_q
+
+
+class SACCostEnsemble(QTransformation):
+    def __call__(
+        self,
+        transitions: Transition,
+        q_fn: Callable[[jax.Array, jax.Array, jax.Array], jax.Array],
+        policy: Callable[[jax.Array], tuple[jax.Array, jax.Array]],
+        gamma: float,
+        alpha: jax.Array | None = None,
+        scale: float = 1.0,
+        key: jax.Array | None = None,
+    ):
+        next_action, _ = policy(transitions.next_observation)
+        next_q = q_fn(
+            transitions.next_observation,
+            next_action,
+            transitions.extras["state_extras"]["idx"],
+        )
+        next_v = next_q.mean(axis=-1)
+        cost = transitions.extras["state_extras"]["cost"]
+        target_q = jax.lax.stop_gradient(
+            cost * scale + transitions.discount * gamma * next_v
         )
         return target_q

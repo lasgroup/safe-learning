@@ -144,7 +144,7 @@ def make_losses(
         )
         log_prob = parametric_action_distribution.log_prob(dist_params, action)
         action = parametric_action_distribution.postprocess(action)
-        qr_action = qr_network.apply(  # TODO: here I need to decide an i or loop over i and take the mean
+        qr_action = qr_network.apply(
             normalizer_params, qr_params, transitions.observation, action
         )
         if use_bro:

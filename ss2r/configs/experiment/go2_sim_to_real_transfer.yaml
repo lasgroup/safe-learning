@@ -11,14 +11,14 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: true
   num_eval_envs: 128
-  wandb_id: unsgkc2n
+  wandb_id: 2qjg8bz5
   episode_length: 1000
   render: true
   
 agent:
   replay_buffer:
     wandb_ids:
-      - unsgkc2n
+      - 2qjg8bz5
     mix: [0.5, 0.0, 10000]
   num_critic_updates_per_actor_update: 20
   grad_updates_per_step: 1250

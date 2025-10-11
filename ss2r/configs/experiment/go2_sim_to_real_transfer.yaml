@@ -2,6 +2,7 @@
 defaults:
   - go2_online
   - override /agent/data_collection: episodic
+  - override /environment: go2_joystick
   - _self_
   
 
@@ -20,4 +21,4 @@ agent:
       - 2qjg8bz5
     mix: [0.5, 0.0, 10000]
   num_critic_updates_per_actor_update: 20
-  grad_updates_per_step: 1000
+  grad_updates_per_step: 1250

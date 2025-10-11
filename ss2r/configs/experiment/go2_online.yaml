@@ -14,18 +14,18 @@ training:
   render: false
   wandb_id: 1irm7iaj
   safe: false
-  episode_length: 250
+  episode_length: 1000
 
 agent:
-  min_replay_size: 250
+  min_replay_size: 1000
   replay_buffer:
     wandb_ids:
       - 1irm7iaj
     mix: [0.5, 0.0, 10000]
-  grad_updates_per_step: 500
+  grad_updates_per_step: 1250
   learning_rate: 1e-5
   critic_learning_rate: 3e-4
-  num_critic_updates_per_actor_update: 10
+  num_critic_updates_per_actor_update: 20
   n_critics: 2
   n_heads: 1
   data_collection:

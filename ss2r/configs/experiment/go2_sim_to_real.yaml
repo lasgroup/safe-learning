@@ -8,8 +8,13 @@ defaults:
 
 
 training:
-  train_domain_randomization: false
-  eval_domain_randomization: false
+  train_domain_randomization: true
+  eval_domain_randomization: true
+  
+environment:
+  task_params:
+    command_config:
+      a: [0.2, 0.8, 1.2] 
   
 
 agent:

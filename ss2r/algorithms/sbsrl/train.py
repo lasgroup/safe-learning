@@ -538,6 +538,7 @@ def train(
         safety_filter,
         offline,
         pure_exploration_steps,
+        critic_ensemble_size=model_ensemble_size,
     )
 
     def prefill_replay_buffer(

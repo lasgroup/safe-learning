@@ -54,55 +54,42 @@ def make_on_policy_training_step(
     safety_filter,
     offline,
     pure_exploration_steps,
+    critic_ensemble_size,
 ) -> TrainingStepFn:
     def split_transitions_ensemble(
         transitions: Transition, ensemble_axis: int = 1
-    ) -> Transition:  # TODO: add types
-        ref = (
-            transitions.next_observation
-            if hasattr(transitions, "next_observation")
-            else jax.tree_util.tree_leaves(transitions)[0]
-        )
-        ref = jnp.asarray(ref)
-        if ref.ndim <= ensemble_axis:
-            raise ValueError(
-                f"Reference leaf has ndim {ref.ndim} <= ensemble_axis {ensemble_axis}"
-            )
-
-        E = ref.shape[ensemble_axis]
-
+    ) -> Transition:
         def _per_ens_leaf(x):
             x = jnp.asarray(x)
-            if x.ndim > ensemble_axis and x.shape[ensemble_axis] == E:
+            if (
+                x.ndim > ensemble_axis
+                and x.shape[ensemble_axis] == critic_ensemble_size
+            ):
                 perm = list(range(x.ndim))
                 perm.pop(ensemble_axis)
                 perm = [ensemble_axis] + perm
                 return jnp.transpose(x, axes=perm)
-            else:  # no ensemble axis
-                expanded = jnp.expand_dims(x, axis=0)  # (1, U, B, ...)
-                target_shape = (E,) + x.shape
+            else:
+                expanded = jnp.expand_dims(x, axis=0)
+                target_shape = (critic_ensemble_size,) + x.shape
                 return jnp.broadcast_to(expanded, target_shape)
 
         trans_per_ens = jax.tree_util.tree_map(_per_ens_leaf, transitions)
 
+        # add index of ensemble prediction as an extra field
         sample_leaf = jax.tree_util.tree_leaves(trans_per_ens)[0]
-        slshape = sample_leaf.shape
-        B = int(slshape[1])
-        idx = jnp.arange(E, dtype=jnp.int32)[:, None, None]  # (E,1,1)
-        idx = jnp.broadcast_to(idx, (E, B, 1))  # (E,B,1)
-
-        def _update_extras_map(extras):
-            extras_dict = dict(extras)
-            state_extras = dict(extras_dict.get("state_extras", {}))
-            state_extras["idx"] = idx
-            extras_dict["state_extras"] = state_extras
-            return extras_dict
-
-        orig_extras = trans_per_ens.extras
-        new_extras = _update_extras_map(orig_extras)
-
-        new_trans = trans_per_ens._replace(extras=new_extras)
-        return new_trans
+        B = int(sample_leaf.shape[1])
+        idx = jnp.arange(critic_ensemble_size, dtype=jnp.int32)[:, None, None]
+        idx = jnp.broadcast_to(idx, (critic_ensemble_size, B, 1))
+        new_extras = {
+            **trans_per_ens.extras,
+            "state_extras": {
+                **trans_per_ens.extras.get("state_extras", {}),
+                "idx": idx,
+            },
+        }
+        trans_per_ens = trans_per_ens._replace(extras=new_extras)
+        return trans_per_ens
 
     def scan_update(update_callable, init_params, init_opt_state, trans_per_ens, keys):
         def _body(carry, elems):
@@ -128,11 +115,11 @@ def make_on_policy_training_step(
 
         # reshape transitions with leading ensemble size
         trans_per_ens = split_transitions_ensemble(transitions, ensemble_axis=1)
-        sample_leaf = jax.tree_util.tree_leaves(trans_per_ens)[0]
-        E = int(jnp.asarray(sample_leaf).shape[0])
 
         # reward critic update for each ensemble prediction
-        _unused, *ens_keys_reward = jax.random.split(key_critic, E + 1)
+        _unused, *ens_keys_reward = jax.random.split(
+            key_critic, critic_ensemble_size + 1
+        )
         ens_keys_reward = jnp.stack(ens_keys_reward)
         reward_updater = lambda params, opt_state, trans_single, key_i: critic_update(
             params,
@@ -162,7 +149,9 @@ def make_on_policy_training_step(
             if penalizer is not None:
                 # cost critic update for each ensemble prediction
                 key, key_cost = jax.random.split(key)
-                _unused, *ens_keys_cost = jax.random.split(key_cost, E + 1)
+                _unused, *ens_keys_cost = jax.random.split(
+                    key_cost, critic_ensemble_size + 1
+                )
                 ens_keys_cost = jnp.stack(ens_keys_cost)
                 cost_updater = (
                     lambda params, opt_state, trans_single, key_i: cost_critic_update(
@@ -235,7 +224,7 @@ def make_on_policy_training_step(
             backup_qc_optimizer_state=backup_qc_optimizer_state,
             backup_qc_params=backup_qc_params,
             backup_target_qc_params=new_backup_target_qc_params,
-            gradient_steps=training_state.gradient_steps + E,
+            gradient_steps=training_state.gradient_steps + 1,
         )
         return (new_training_state, key), metrics
 

@@ -50,7 +50,7 @@ class SACBaseEnsemble(QTransformation):
         scale: float = 1.0,
         key: jax.Array | None = None,
     ):
-        next_action, next_log_prob = policy(transitions.next_observation)  # TODO:
+        next_action, next_log_prob = policy(transitions.next_observation)
         next_q = q_fn(
             transitions.next_observation,
             next_action,

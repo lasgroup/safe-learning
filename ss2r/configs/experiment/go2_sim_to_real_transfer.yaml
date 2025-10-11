@@ -12,6 +12,7 @@ training:
   num_eval_envs: 128
   wandb_id: 2qjg8bz5
   episode_length: 1000
+  render: true
   
 agent:
   replay_buffer:

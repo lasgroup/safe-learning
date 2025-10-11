@@ -1,8 +1,7 @@
 # @package _global_
 defaults:
-  - g2_online
+  - go2_online
   - override /agent/data_collection: episodic
-  - override /agent/penalizer: null
   - _self_
   
 

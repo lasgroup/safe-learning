@@ -27,7 +27,7 @@ from brax.training.types import Params, PRNGKey
 
 from ss2r.algorithms.penalizers import Penalizer
 from ss2r.algorithms.sbsrl.networks import SBSRLNetworks
-from ss2r.algorithms.sbsrl.q_transforms import SACBaseEnsemble
+from ss2r.algorithms.sbsrl.q_transforms import QTransformation
 
 Transition: TypeAlias = types.Transition
 
@@ -77,7 +77,7 @@ def make_losses(
         alpha: jnp.ndarray,
         transitions: Transition,
         key: PRNGKey,
-        target_q_fn: SACBaseEnsemble,
+        target_q_fn: QTransformation,
         safe: bool = False,
     ) -> jnp.ndarray:
         action = transitions.action

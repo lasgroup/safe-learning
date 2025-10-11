@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -104,6 +104,20 @@ def make_on_policy_training_step(
         new_trans = trans_per_ens._replace(extras=new_extras)
         return new_trans
 
+    def scan_update(update_callable, init_params, init_opt_state, trans_per_ens, keys):
+        def _body(carry, elems):
+            params, opt_state = carry
+            trans_single, key_i = elems
+            loss_i, new_params, new_opt_state = update_callable(
+                params, opt_state, trans_single, key_i
+            )
+            return (new_params, new_opt_state), loss_i
+
+        (final_params, final_opt_state), losses = jax.lax.scan(
+            _body, (init_params, init_opt_state), (trans_per_ens, keys)
+        )
+        return final_params, final_opt_state, losses
+
     def critic_sgd_step(
         carry: Tuple[TrainingState, PRNGKey], transitions: Transition
     ) -> Tuple[Tuple[TrainingState, PRNGKey], Metrics]:
@@ -112,55 +126,76 @@ def make_on_policy_training_step(
         transitions = float32(transitions)
         alpha = jnp.exp(training_state.alpha_params) + min_alpha
 
+        # reshape transitions with leading ensemble size
         trans_per_ens = split_transitions_ensemble(transitions, ensemble_axis=1)
-
         sample_leaf = jax.tree_util.tree_leaves(trans_per_ens)[0]
         E = int(jnp.asarray(sample_leaf).shape[0])
-        _unused, *ens_keys = jax.random.split(key_critic, E + 1)
-        ens_keys = jnp.stack(ens_keys)  # shape (E, 2)
 
-        def _scan_body(carry, elems):
-            """
-            carry: (params, opt_state)
-            elems: (trans_single, key_i)
-            """
-            params, opt_state = carry
-            trans_single, key_i = elems
-
-            loss_i, new_params, new_opt_state = critic_update(
-                params,
-                training_state.behavior_policy_params,
-                training_state.normalizer_params,
-                training_state.behavior_target_qr_params,
-                alpha,
-                trans_single,
-                key_i,
-                reward_q_transform,
-                optimizer_state=opt_state,
-                params=params,
-            )
-            carry_out = (new_params, new_opt_state)
-            return carry_out, loss_i
-
-        elems = (trans_per_ens, ens_keys)
-        (
-            (behavior_qr_params, behavior_qr_optimizer_state),
-            ensemble_losses,
-        ) = jax.lax.scan(
-            _scan_body,
-            (
-                training_state.behavior_qr_params,
-                training_state.behavior_qr_optimizer_state,
-            ),
-            elems,
-            length=E,
+        # reward critic update for each ensemble prediction
+        _unused, *ens_keys_reward = jax.random.split(key_critic, E + 1)
+        ens_keys_reward = jnp.stack(ens_keys_reward)
+        reward_updater = lambda params, opt_state, trans_single, key_i: critic_update(
+            params,
+            training_state.behavior_policy_params,
+            training_state.normalizer_params,
+            training_state.behavior_target_qr_params,
+            alpha,
+            trans_single,
+            key_i,
+            reward_q_transform,
+            optimizer_state=opt_state,
+            params=params,
+        )
+        behavior_qr_params, behavior_qr_optimizer_state, ensemble_losses = scan_update(
+            reward_updater,
+            training_state.behavior_qr_params,
+            training_state.behavior_qr_optimizer_state,
+            trans_per_ens,
+            ens_keys_reward,
         )
         critic_loss = jnp.mean(ensemble_losses)
 
         if safe:
-            raise Exception("not yet implemented for safety")
+            cost_metrics = {}
+            backup_qc_params = training_state.backup_qc_params
+            backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
+            if penalizer is not None:
+                # cost critic update for each ensemble prediction
+                key, key_cost = jax.random.split(key)
+                _unused, *ens_keys_cost = jax.random.split(key_cost, E + 1)
+                ens_keys_cost = jnp.stack(ens_keys_cost)
+                cost_updater = (
+                    lambda params, opt_state, trans_single, key_i: cost_critic_update(
+                        params,
+                        training_state.behavior_policy_params,
+                        training_state.normalizer_params,
+                        training_state.behavior_target_qc_params,
+                        alpha,
+                        trans_single,
+                        key_i,
+                        cost_q_transform,
+                        True,
+                        optimizer_state=opt_state,
+                        params=params,
+                    )
+                )
+                (
+                    behavior_qc_params,
+                    behavior_qc_optimizer_state,
+                    cost_losses,
+                ) = scan_update(
+                    cost_updater,
+                    training_state.behavior_qc_params,
+                    training_state.behavior_qc_optimizer_state,
+                    trans_per_ens,
+                    ens_keys_cost,
+                )
+                cost_metrics["behavior_cost_critic_loss"] = jnp.mean(cost_losses)
+            else:
+                behavior_qc_params = training_state.behavior_qc_params
+                behavior_qc_optimizer_state = training_state.behavior_qc_optimizer_state
         else:
-            cost_metrics: Dict[str, Any] = {}
+            cost_metrics = {}
             backup_qc_params = training_state.backup_qc_params
             backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
             behavior_qc_params = training_state.behavior_qc_params
@@ -173,7 +208,15 @@ def make_on_policy_training_step(
             training_state.behavior_target_qr_params, behavior_qr_params
         )
         if safe:
-            raise Exception("not yet implemented for safety")
+            new_backup_target_qc_params = polyak(
+                training_state.backup_target_qc_params, backup_qc_params
+            )
+            if penalizer is not None:
+                new_behavior_target_qc_params = polyak(
+                    training_state.behavior_target_qc_params, behavior_qc_params
+                )
+            else:
+                new_behavior_target_qc_params = training_state.behavior_target_qc_params
         else:
             new_backup_target_qc_params = training_state.backup_target_qc_params
             new_behavior_target_qc_params = training_state.behavior_target_qc_params
@@ -311,7 +354,6 @@ def make_on_policy_training_step(
         _, transitions = acting.actor_step(
             planning_env, state, policy, key_generate_unroll, extra_fields=extra_fields
         )
-        # transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), transitions) #don't need it anymore as we don't have unroll_length dimension
         sac_replay_buffer_state = sac_replay_buffer.insert(
             sac_replay_buffer_state, float16(transitions)
         )

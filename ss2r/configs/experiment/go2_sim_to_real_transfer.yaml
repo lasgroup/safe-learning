@@ -1,0 +1,19 @@
+# @package _global_
+defaults:
+  - g2_online
+  - override /agent/data_collection: episodic
+  - override /agent/penalizer: null
+  - _self_
+  
+
+
+training:
+  train_domain_randomization: false
+  eval_domain_randomization: true
+  wandb_id: 1irm7iaj
+  
+agent:
+  replay_buffer:
+    wandb_ids:
+      - 1irm7iaj
+    mix: [0.5, 0.0, 10000]

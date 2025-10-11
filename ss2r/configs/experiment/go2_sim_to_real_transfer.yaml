@@ -10,10 +10,10 @@ defaults:
 training:
   train_domain_randomization: false
   eval_domain_randomization: true
-  wandb_id: 1irm7iaj
+  wandb_id: 2qjg8bz5
   
 agent:
   replay_buffer:
     wandb_ids:
-      - 1irm7iaj
+      - 2qjg8bz5
     mix: [0.5, 0.0, 10000]

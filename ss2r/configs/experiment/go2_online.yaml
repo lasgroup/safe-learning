@@ -28,5 +28,5 @@ agent:
   num_critic_updates_per_actor_update: 20
   n_critics: 2
   n_heads: 1
-  agent/data_collection:
+  data_collection:
     wait_time_sec: 60

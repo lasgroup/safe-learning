@@ -22,7 +22,7 @@ agent:
     wandb_ids:
       - 1irm7iaj
     mix: [0.5, 0.0, 10000]
-  grad_updates_per_step: 1250
+  grad_updates_per_step: 2500
   learning_rate: 1e-5
   critic_learning_rate: 3e-4
   num_critic_updates_per_actor_update: 20

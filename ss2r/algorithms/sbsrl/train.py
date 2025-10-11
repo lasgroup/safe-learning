@@ -86,6 +86,7 @@ def _init_training_state(
     qc_optimizer: optax.GradientTransformation,
     model_optimizer: optax.GradientTransformation,
     model_ensemble_size: int,
+    embedding_dim: int,
     penalizer_params: Params | None,
 ) -> TrainingState:
     """Inits the training state and replicates it over devices."""
@@ -269,7 +270,7 @@ def train(
         n_critics=n_critics,
         n_heads=n_heads,
         ensemble_size=model_ensemble_size,
-        embedding_dim=model_ensemble_size,
+        embedding_dim=embedding_dim,
     )
     alpha_optimizer = optax.adam(learning_rate=alpha_learning_rate)
     make_optimizer = lambda lr, grad_clip_norm: optax.chain(
@@ -324,6 +325,7 @@ def train(
         qc_optimizer=qc_optimizer,
         model_optimizer=model_optimizer,
         model_ensemble_size=model_ensemble_size,
+        embedding_dim=embedding_dim,
         penalizer_params=penalizer_params,
     )
     del global_key

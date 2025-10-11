@@ -11,9 +11,12 @@ training:
   eval_domain_randomization: true
   num_eval_envs: 128
   wandb_id: 2qjg8bz5
+  episode_length: 500
   
 agent:
   replay_buffer:
     wandb_ids:
       - 2qjg8bz5
     mix: [0.5, 0.0, 10000]
+  num_critic_updates_per_actor_update: 10
+  grad_updates_per_step: 2500

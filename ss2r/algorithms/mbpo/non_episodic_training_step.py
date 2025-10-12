@@ -108,12 +108,17 @@ def make_non_episodic_training_step(
             "fraction_done": 1.0 - transitions.discount.mean(),
             **cost_metrics,
         }
+        # Note that we store the qc of the backup also as the
+        # qc of behavior, this is so that later it
+        # will get save correctly to the checkpoint.
         new_training_state = training_state.replace(  # type: ignore
             behavior_qr_optimizer_state=behavior_qr_optimizer_state,
             behavior_qr_params=behavior_qr_params,
             behavior_target_qr_params=new_behavior_target_qr_params,
             backup_qc_optimizer_state=backup_qc_optimizer_state,
             backup_qc_params=backup_qc_params,
+            behavior_qc_optimizer_state=backup_qc_optimizer_state,
+            behavior_qc_params=backup_qc_params,
             backup_target_qc_params=new_backup_target_qc_params,
             gradient_steps=training_state.gradient_steps + 1,
         )

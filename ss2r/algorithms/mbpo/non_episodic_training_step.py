@@ -156,6 +156,8 @@ def make_non_episodic_training_step(
             transitions,
             key_actor,
             safety_budget,
+            None,
+            None,
             optimizer_state=training_state.behavior_policy_optimizer_state,
             params=training_state.behavior_policy_params,
         )

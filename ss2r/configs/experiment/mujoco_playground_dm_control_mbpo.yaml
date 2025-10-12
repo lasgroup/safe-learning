@@ -1,0 +1,13 @@
+training:
+  num_envs: 128
+
+agent:
+  sac_batch_size: 512
+  critic_grad_updates_per_step: 8
+  learning_rate: 0.001
+  max_replay_size: 4194304
+  min_replay_size: 8192
+  policy_hidden_layer_sizes: [256, 256, 256]
+  value_hidden_layer_sizes: [512, 512]
+  model_hidden_layer_sizes: [400, 400, 400, 400]
+  activation: swish

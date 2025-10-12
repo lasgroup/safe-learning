@@ -1,0 +1,18 @@
+# @package _global_
+defaults:
+  - mujoco_playground_dm_control_mbpo
+  - override /agent: mbpo
+  - override /environment: humanoid_getup
+  - _self_
+
+training:
+  num_timesteps: 5000000
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  episode_length: 300
+  safe: false
+  safety_discounting: 1.
+
+agent:
+  training_step_fn: non_episodic
+  model_grad_updates_per_step: 1

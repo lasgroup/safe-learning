@@ -10,7 +10,6 @@ from ss2r.algorithms.sac.types import (
     Metrics,
     ReplayBufferState,
     Transition,
-    float16,
     float32,
 )
 
@@ -174,27 +173,6 @@ def make_non_episodic_training_step(
         )
         return (new_training_state, key), metrics
 
-    def model_sgd_step(
-        carry: Tuple[TrainingState, PRNGKey], transitions: Transition
-    ) -> Tuple[Tuple[TrainingState, PRNGKey], Metrics]:
-        training_state, key = carry
-        # TODO (yarden): can remove this
-        key, _ = jax.random.split(key)
-        transitions = float32(transitions)
-        model_loss, model_params, model_optimizer_state = model_update(
-            training_state.model_params,
-            training_state.normalizer_params,
-            transitions,
-            optimizer_state=training_state.model_optimizer_state,  # type: ignore
-            params=training_state.model_params,
-        )
-        new_training_state = training_state.replace(  # type: ignore
-            model_optimizer_state=model_optimizer_state,
-            model_params=model_params,
-        )
-        metrics = {"model_loss": model_loss}
-        return (new_training_state, key), metrics
-
     def run_experience_step(
         training_state: TrainingState,
         env_state: envs.State,
@@ -230,29 +208,12 @@ def make_non_episodic_training_step(
         TrainingState, envs.State, ReplayBufferState, ReplayBufferState, Metrics
     ]:
         """Splits training into experience collection and a jitted training step."""
-        # Keep the original buffer state, so that model-generated data is discarded
         (
             training_state,
             env_state,
-            model_buffer_state,
+            sac_buffer_state,
             training_key,
-        ) = run_experience_step(training_state, env_state, model_buffer_state, key)
-        model_buffer_state, transitions = model_replay_buffer.sample(model_buffer_state)
-        # Change the front dimension of transitions so 'update_step' is called
-        # grad_updates_per_step times by the scan.
-        tmp_transitions = jax.tree_util.tree_map(
-            lambda x: jnp.reshape(x, (model_grad_updates_per_step, -1) + x.shape[1:]),
-            transitions,
-        )
-        (training_state, _), model_metrics = jax.lax.scan(
-            model_sgd_step, (training_state, training_key), tmp_transitions
-        )
-        # Insert real transitions to the replay buffer too.
-        # TODO (yarden): currently using only real system data, not
-        # model-generated data.
-        sac_buffer_state = sac_replay_buffer.insert(
-            sac_buffer_state, float16(transitions)
-        )
+        ) = run_experience_step(training_state, env_state, sac_buffer_state, key)
         # Train SAC
         sac_buffer_state, sac_transitions = sac_replay_buffer.sample(sac_buffer_state)
         transitions = jax.tree_util.tree_map(
@@ -275,8 +236,8 @@ def make_non_episodic_training_step(
             transitions,
             length=num_actor_updates,
         )
-        metrics = {**model_metrics, **critic_metrics, **actor_metrics}
-        metrics["buffer_current_size"] = model_replay_buffer.size(model_buffer_state)
+        metrics = {**critic_metrics, **actor_metrics}
+        metrics["buffer_current_size"] = sac_replay_buffer.size(model_buffer_state)
         metrics |= env_state.metrics
         return (
             training_state,

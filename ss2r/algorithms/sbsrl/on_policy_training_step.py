@@ -55,6 +55,7 @@ def make_on_policy_training_step(
     offline,
     pure_exploration_steps,
     ensemble_size,
+    sac_batch_size,
 ) -> TrainingStepFn:
     def split_transitions_ensemble(
         transitions: Transition, ensemble_axis: int = 1
@@ -74,10 +75,8 @@ def make_on_policy_training_step(
         trans_per_ens = jax.tree_util.tree_map(_per_ens_leaf, transitions)
 
         # add index of ensemble prediction as an extra field
-        sample_leaf = jax.tree_util.tree_leaves(trans_per_ens)[0]
-        B = int(sample_leaf.shape[1])
         idx = jnp.arange(ensemble_size, dtype=jnp.int32)[:, None, None]
-        idx = jnp.broadcast_to(idx, (ensemble_size, B, 1))
+        idx = jnp.broadcast_to(idx, (ensemble_size, sac_batch_size, 1))
         new_extras = {
             **trans_per_ens.extras,
             "state_extras": {

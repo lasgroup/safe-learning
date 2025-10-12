@@ -68,7 +68,7 @@ def make_non_episodic_training_step(
                 jnp.ones_like(transitions.discount),
                 jnp.zeros_like(transitions.discount),
             )
-            backup_transitions = transitions.replace(discount=new_discount)
+            backup_transitions = transitions._replace(discount=new_discount)
             cost_metrics = {}
             (
                 backup_cost_critic_loss,

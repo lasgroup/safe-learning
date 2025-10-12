@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+  - go1_online
+  - override /agent/data_collection: episodic
+  - override /environment: go1_joystick
+  - _self_
+  
+
+
+training:
+  train_domain_randomization: false
+  eval_domain_randomization: true
+  num_eval_envs: 128
+  render: true
+  
+environment:
+  task_params:
+    command_config:
+      a: [1., 0.8, 1.2]
+  

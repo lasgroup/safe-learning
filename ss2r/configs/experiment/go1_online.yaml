@@ -2,8 +2,31 @@
 defaults:
   - go1_joystick
   - override /agent/data_collection: hardware
+  - override /agent/replay_buffer: rae
+  - override /agent/penalizer: null
   - _self_
 
 training:
   num_envs: 1
   num_eval_envs: 1
+  num_timesteps: 25000
+  num_evals: 5
+  render: false
+  wandb_id: 02anvfes
+  safe: false
+  episode_length: 1000
+
+agent:
+  min_replay_size: 1000
+  replay_buffer:
+    wandb_ids:
+      - 02anvfes
+    mix: [0.5, 0.0, 10000]
+  grad_updates_per_step: 1250
+  learning_rate: 1e-5
+  critic_learning_rate: 3e-4
+  num_critic_updates_per_actor_update: 20
+  n_critics: 2
+  n_heads: 1
+  data_collection:
+    wait_time_sec: 60

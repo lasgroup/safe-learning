@@ -54,24 +54,21 @@ def make_on_policy_training_step(
     safety_filter,
     offline,
     pure_exploration_steps,
-    critic_ensemble_size,
+    ensemble_size,
 ) -> TrainingStepFn:
     def split_transitions_ensemble(
         transitions: Transition, ensemble_axis: int = 1
     ) -> Transition:
         def _per_ens_leaf(x):
             x = jnp.asarray(x)
-            if (
-                x.ndim > ensemble_axis
-                and x.shape[ensemble_axis] == critic_ensemble_size
-            ):
+            if x.ndim > ensemble_axis and x.shape[ensemble_axis] == ensemble_size:
                 perm = list(range(x.ndim))
                 perm.pop(ensemble_axis)
                 perm = [ensemble_axis] + perm
                 return jnp.transpose(x, axes=perm)
             else:
                 expanded = jnp.expand_dims(x, axis=0)
-                target_shape = (critic_ensemble_size,) + x.shape
+                target_shape = (ensemble_size,) + x.shape
                 return jnp.broadcast_to(expanded, target_shape)
 
         trans_per_ens = jax.tree_util.tree_map(_per_ens_leaf, transitions)
@@ -79,8 +76,8 @@ def make_on_policy_training_step(
         # add index of ensemble prediction as an extra field
         sample_leaf = jax.tree_util.tree_leaves(trans_per_ens)[0]
         B = int(sample_leaf.shape[1])
-        idx = jnp.arange(critic_ensemble_size, dtype=jnp.int32)[:, None, None]
-        idx = jnp.broadcast_to(idx, (critic_ensemble_size, B, 1))
+        idx = jnp.arange(ensemble_size, dtype=jnp.int32)[:, None, None]
+        idx = jnp.broadcast_to(idx, (ensemble_size, B, 1))
         new_extras = {
             **trans_per_ens.extras,
             "state_extras": {
@@ -117,9 +114,7 @@ def make_on_policy_training_step(
         trans_per_ens = split_transitions_ensemble(transitions, ensemble_axis=1)
 
         # reward critic update for each ensemble prediction
-        _unused, *ens_keys_reward = jax.random.split(
-            key_critic, critic_ensemble_size + 1
-        )
+        _, *ens_keys_reward = jax.random.split(key_critic, ensemble_size + 1)
         ens_keys_reward = jnp.stack(ens_keys_reward)
         reward_updater = lambda params, opt_state, trans_single, key_i: critic_update(
             params,
@@ -149,9 +144,7 @@ def make_on_policy_training_step(
             if penalizer is not None:
                 # cost critic update for each ensemble prediction
                 key, key_cost = jax.random.split(key)
-                _unused, *ens_keys_cost = jax.random.split(
-                    key_cost, critic_ensemble_size + 1
-                )
+                _, *ens_keys_cost = jax.random.split(key_cost, ensemble_size + 1)
                 ens_keys_cost = jnp.stack(ens_keys_cost)
                 cost_updater = (
                     lambda params, opt_state, trans_single, key_i: cost_critic_update(

@@ -455,6 +455,7 @@ def train(
         action_size=action_size,
         use_bro=use_bro,
         normalize_fn=normalize_fn,
+        ensemble_size=model_ensemble_size,
         target_entropy=target_entropy,
     )
     alpha_update = (
@@ -538,7 +539,7 @@ def train(
         safety_filter,
         offline,
         pure_exploration_steps,
-        critic_ensemble_size=model_ensemble_size,
+        ensemble_size=model_ensemble_size,
     )
 
     def prefill_replay_buffer(

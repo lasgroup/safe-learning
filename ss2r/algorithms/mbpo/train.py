@@ -520,7 +520,7 @@ def train(
             env,
             make_rollout_policy,
             get_rollout_policy_params,
-            model_buffer_state,
+            model_replay_buffer,
             sac_replay_buffer,
             alpha_update,
             critic_update,

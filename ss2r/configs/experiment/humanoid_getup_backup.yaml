@@ -11,8 +11,8 @@ training:
   eval_domain_randomization: false
   episode_length: 300
   safe: false
-  safety_discounting: 1.
 
 agent:
   training_step_fn: non_episodic
   model_grad_updates_per_step: 1
+  safety_discounting: 1.

@@ -145,9 +145,18 @@ def make_losses(
         )
         log_prob = parametric_action_distribution.log_prob(dist_params, action)
         action = parametric_action_distribution.postprocess(action)
-        qr_action = qr_network.apply(
-            normalizer_params, qr_params, transitions.observation, action
-        )
+
+        idxs = jnp.arange(ensemble_size, dtype=jnp.int32)
+        qr_action = jax.vmap(
+            lambda i: qr_network.apply(
+                normalizer_params,
+                qr_params,
+                transitions.observation,
+                action,
+                jnp.full((transitions.observation.shape[0],), i, dtype=jnp.int32),
+            )
+        )(idxs)  # (E, B, n_critics)
+
         if use_bro:
             qr = jnp.mean(qr_action, axis=-1)
         else:
@@ -157,9 +166,15 @@ def make_losses(
         aux = {}
         if penalizer is not None:
             assert qc_network is not None
-            qc_action = qc_network.apply(
-                normalizer_params, qc_params, transitions.observation, action
-            )
+            qc_action = jax.vmap(
+                lambda i: qc_network.apply(
+                    normalizer_params,
+                    qc_params,
+                    transitions.observation,
+                    action,
+                    jnp.full((transitions.observation.shape[0],), i, dtype=jnp.int32),
+                )
+            )(idxs)  # (E, B, n_critics)
             mean_qc = jnp.mean(qc_action, axis=-1)
             constraint = safety_budget - mean_qc.mean()
             actor_loss, penalizer_aux, penalizer_params = penalizer(

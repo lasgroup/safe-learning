@@ -2,7 +2,7 @@ import functools
 
 import ss2r.algorithms.mbpo.networks as mbpo_networks
 import ss2r.algorithms.mbpo.vision_networks as mbpo_vision_networks
-from ss2r.algorithms.mbpo import on_policy_training_step
+from ss2r.algorithms.mbpo import non_episodic_training_step, on_policy_training_step
 from ss2r.algorithms.penalizers import get_penalizer
 from ss2r.algorithms.sac.data import get_collection_fn
 from ss2r.algorithms.sac.q_transforms import (
@@ -14,6 +14,8 @@ from ss2r.algorithms.sac.q_transforms import (
 def get_training_step_fn(cfg):
     if cfg.agent.training_step_fn == "on_policy":
         return on_policy_training_step.make_on_policy_training_step
+    if cfg.agent.training_step_fn == "non_episodic":
+        return non_episodic_training_step.make_non_episodic_training_step
     else:
         raise ValueError(f"Unknown training_step_fn: {cfg.agent.training_step_fn}")
 

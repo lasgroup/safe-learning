@@ -184,6 +184,8 @@ def make_losses(
             aux["cost"] = mean_qc.mean()
             aux["penalizer_params"] = penalizer_params
             aux |= penalizer_aux
+            aux["qc_std"] = jnp.std(jnp.mean(mean_qc, axis=-1))
+        aux["qr_std"] = jnp.std(jnp.mean(qr, axis=-1))
         actor_loss += exploration_loss
         return actor_loss, aux
 

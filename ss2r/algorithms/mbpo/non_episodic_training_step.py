@@ -38,6 +38,7 @@ def make_non_episodic_training_step(
     tau,
     num_critic_updates_per_actor_update,
     safety_budget,
+    qc_netwrok,
 ) -> TrainingStepFn:
     def critic_sgd_step(
         carry: Tuple[TrainingState, PRNGKey], transitions: Transition
@@ -86,7 +87,14 @@ def make_non_episodic_training_step(
                 optimizer_state=training_state.backup_qc_optimizer_state,
                 params=training_state.backup_qc_params,
             )
+            time_to_recovery = qc_netwrok.apply(
+                training_state.normalizer_params,
+                backup_qc_params,
+                transitions.observation,
+                transitions.action,
+            ).mean()
             cost_metrics["backup_cost_critic_loss"] = backup_cost_critic_loss
+            cost_metrics["time_to_recovery"] = time_to_recovery
         else:
             cost_metrics = {}
             backup_qc_params = training_state.backup_qc_params

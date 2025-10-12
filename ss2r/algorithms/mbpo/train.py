@@ -539,6 +539,7 @@ def train(
             tau,
             num_critic_updates_per_actor_update,
             safety_budget,
+            mbpo_network.qc_network,
         )
 
     def prefill_replay_buffer(

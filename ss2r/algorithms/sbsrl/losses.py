@@ -175,8 +175,10 @@ def make_losses(
                     jnp.full((transitions.observation.shape[0],), i, dtype=jnp.int32),
                 )
             )(idxs)  # (E, B, n_critics)
-            mean_qc = jnp.mean(qc_action, axis=-1)
-            constraint = safety_budget - mean_qc.mean()
+            mean_qc = jnp.mean(qc_action, axis=(1, 2))
+            constraint = (
+                safety_budget - mean_qc.max()
+            )  # TODO: is this different from asking that all of them satisfy the constraint?
             actor_loss, penalizer_aux, penalizer_params = penalizer(
                 actor_loss, constraint, jax.lax.stop_gradient(penalizer_params)
             )
@@ -184,7 +186,7 @@ def make_losses(
             aux["cost"] = mean_qc.mean()
             aux["penalizer_params"] = penalizer_params
             aux |= penalizer_aux
-            aux["qc_std"] = jnp.std(jnp.mean(mean_qc, axis=-1))
+            aux["qc_std"] = jnp.std(mean_qc)
         aux["qr_std"] = jnp.std(jnp.mean(qr, axis=-1))
         actor_loss += exploration_loss
         return actor_loss, aux

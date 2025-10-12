@@ -64,7 +64,21 @@ manipulation.register_environment(
 )
 dm_control_suite.register_environment(
     "HumanoidGetup",
-    humanoid_getup.HumanoidGetup,
+    functools.partial(humanoid_getup.HumanoidGetup, move_speed=0.0),
+    dm_control_suite.humanoid.default_config,
+)
+dm_control_suite.register_environment(
+    "HumanoidGetupWalk",
+    functools.partial(
+        humanoid_getup.HumanoidGetup, move_speed=humanoid_getup.humanoid.WALK_SPEED
+    ),
+    dm_control_suite.humanoid.default_config,
+)
+dm_control_suite.register_environment(
+    "HumanoidGetupRun",
+    functools.partial(
+        humanoid_getup.HumanoidGetup, move_speed=humanoid_getup.humanoid.RUN_SPEED
+    ),
     dm_control_suite.humanoid.default_config,
 )
 

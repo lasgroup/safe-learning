@@ -19,11 +19,12 @@ class HumanoidGetup(humanoid.Humanoid):
 
     def __init__(
         self,
+        move_speed: float = 0.0,
         config: config_dict.ConfigDict = humanoid.default_config(),
         config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
     ):
         super().__init__(
-            move_speed=0.0, config=config, config_overrides=config_overrides
+            move_speed=move_speed, config=config, config_overrides=config_overrides
         )
 
     def _post_init(self):

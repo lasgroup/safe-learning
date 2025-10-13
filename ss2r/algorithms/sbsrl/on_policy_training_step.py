@@ -60,19 +60,26 @@ def make_on_policy_training_step(
     def split_transitions_ensemble(
         transitions: Transition, ensemble_axis: int = 1
     ) -> Transition:
-        def _per_ens_leaf(x):
+        def _reshape_leaf(x, name):
+            if isinstance(x, dict):
+                return {k: _reshape_leaf(v, k) for k, v in x.items()}
             x = jnp.asarray(x)
-            if x.ndim > ensemble_axis and x.shape[ensemble_axis] == ensemble_size:
+            if name in ("observation", "action"):
+                expanded = jnp.expand_dims(x, axis=0)
+                target_shape = (ensemble_size,) + x.shape
+                return jnp.broadcast_to(expanded, target_shape)
+            else:
                 perm = list(range(x.ndim))
                 perm.pop(ensemble_axis)
                 perm = [ensemble_axis] + perm
                 return jnp.transpose(x, axes=perm)
-            else:
-                expanded = jnp.expand_dims(x, axis=0)
-                target_shape = (ensemble_size,) + x.shape
-                return jnp.broadcast_to(expanded, target_shape)
 
-        trans_per_ens = jax.tree_util.tree_map(_per_ens_leaf, transitions)
+        trans_per_ens = transitions._replace(
+            **{
+                f: _reshape_leaf(getattr(transitions, f), f)
+                for f in transitions._fields
+            }
+        )
 
         # add index of ensemble prediction as an extra field
         idx = jnp.arange(ensemble_size, dtype=jnp.int32)[:, None, None]

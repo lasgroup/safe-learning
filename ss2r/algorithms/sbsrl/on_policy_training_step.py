@@ -249,14 +249,13 @@ def make_on_policy_training_step(
             optimizer_state=training_state.behavior_policy_optimizer_state,
             params=training_state.behavior_policy_params,
         )
-        if aux:
+        if "penalizer_params" in aux:
             new_penalizer_params = aux.pop("penalizer_params")
-            additional_metrics = {
-                **aux,
-            }
         else:
             new_penalizer_params = training_state.penalizer_params
-            additional_metrics = {}
+        additional_metrics = {
+            **aux,
+        }
         metrics = {
             "actor_loss": actor_loss,
             "alpha_loss": alpha_loss,

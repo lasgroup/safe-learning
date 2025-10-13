@@ -58,101 +58,6 @@ class CRPO:
         return {}, params
 
 
-class MultiAugmentedLagrangianParams(NamedTuple):
-    lagrange_multiplier: jax.Array
-    penalty_multiplier: jax.Array
-
-
-class MultiAugmentedLagrangian:
-    def __init__(self, penalty_multiplier_factor: float):
-        self.penalty_multiplier_factor = penalty_multiplier_factor
-
-    def __call__(
-        self,
-        actor_loss: jax.Array,
-        constraints: jax.Array,
-        params: MultiAugmentedLagrangianParams,
-        *,
-        rest: Any = None,
-    ) -> tuple[jax.Array, dict[str, Any], MultiAugmentedLagrangianParams]:
-        # --- Record original shapes of the params so we can restore them ---
-        lam_in = jnp.asarray(params.lagrange_multiplier)
-        c_in = jnp.asarray(params.penalty_multiplier)
-
-        lam_shape = lam_in.shape  # either () or (k,)
-        c_shape = c_in.shape  # either () or (k,)
-
-        # --- Work with 1D vectors internally ---
-        lam_vec = jnp.atleast_1d(lam_in)  # shape (L,) where L = 1 or k
-        c_vec = jnp.atleast_1d(c_in)  # same
-
-        # constraints should be vector of length k
-        constraints = jnp.asarray(constraints)
-        k = constraints.shape[0]
-        # If lam_vec/c_vec are length 1 but we have k>1, broadcast/repeat them for computation
-        if lam_vec.shape[0] == 1 and k > 1:
-            lam_comp = jnp.repeat(lam_vec, k)
-        else:
-            lam_comp = lam_vec
-        if c_vec.shape[0] == 1 and k > 1:
-            c_comp = jnp.repeat(c_vec, k)
-        else:
-            c_comp = c_vec
-
-        # Now do the standard augmented lagrangian elementwise on vectors of length k
-        g = -constraints  # g>0 means violation
-        cond = lam_comp + c_comp * g  # shape (k,)
-        psi = jnp.where(
-            cond > 0.0,
-            lam_comp * g + 0.5 * c_comp * g**2,
-            -0.5 * (lam_comp**2) / c_comp,
-        )  # shape (k,)
-
-        psi_total = jnp.sum(psi)  # scalar to add to actor_loss
-
-        # updates (vector)
-        new_lam_comp = jnp.maximum(0.0, cond)
-        new_c_comp = jnp.where(
-            cond > 0.0, c_comp * self.penalty_multiplier_factor, c_comp
-        )
-        # clip (optional) — mimic your previous update behavior if needed
-        new_c_comp = jnp.clip(new_c_comp, a_min=c_comp, a_max=1.0)
-
-        # --- Restore original shapes for outputs so input/output carry types match ---
-        def restore_shape(vec, original_shape):
-            """If original_shape is scalar (), return scalar vec[0]; else return vec reshaped to original."""
-            if original_shape == ():
-                # Return scalar (shape ()) — use vec[0] but keep JAX-friendly ops
-                return jnp.reshape(vec[0], ())
-            else:
-                # If original_shape == (k,) we must ensure vec has length k
-                # If vec length is 1 and original_shape is (k,), we repeat (shouldn't be the case here)
-                if vec.shape[0] == 1 and original_shape[0] > 1:
-                    return jnp.repeat(vec[0], original_shape[0])
-                return jnp.reshape(vec, original_shape)
-
-        new_lam_out = restore_shape(new_lam_comp, lam_shape)
-        new_c_out = restore_shape(new_c_comp, c_shape)
-
-        new_params = MultiAugmentedLagrangianParams(
-            lagrange_multiplier=new_lam_out,
-            penalty_multiplier=new_c_out,
-        )
-
-        # Build aux: choose representations consistent with original shapes.
-        # For debugging it's often helpful to include both per-constraint and aggregated entries.
-        aux = {
-            "psi_per_constraint": psi,  # always vector (k,)
-            "psi_total": psi_total,  # scalar
-            "lagrangian_cond": cond,  # vector (k,)
-            # also return lagrange_multiplier/penalty_multiplier in same shape as input
-            "lagrange_multiplier": new_lam_out,
-            "penalty_multiplier": new_c_out,
-        }
-
-        return actor_loss + psi_total, aux, new_params
-
-
 class AugmentedLagrangianParams(NamedTuple):
     lagrange_multiplier: jax.Array
     penalty_multiplier: jax.Array
@@ -176,7 +81,7 @@ class AugmentedLagrangian:
             "lagrangian_cond": cond,
             "lagrange_multiplier": new_params.lagrange_multiplier,
         }
-        return actor_loss + psi, aux, new_params
+        return actor_loss + jnp.sum(psi), aux, new_params
 
 
 def augmented_lagrangian(
@@ -314,12 +219,20 @@ def get_penalizer(cfg):
         )
         penalizer_state = LBSGDParams(cfg.agent.penalizer.initial_eta)
     elif cfg.agent.penalizer.name == "multi_lagrangian":
-        penalizer = MultiAugmentedLagrangian(
-            cfg.agent.penalizer.penalty_multiplier_factor
+        penalizer = AugmentedLagrangian(cfg.agent.penalizer.penalty_multiplier_factor)
+        # broadcast scalar config parameters to a vector if multiple constraints are needed
+        n_constraints = 1
+        if cfg.training["safe"]:
+            n_constraints = 2
+        lam_vec = jnp.broadcast_to(
+            cfg.agent.penalizer.lagrange_multiplier, (n_constraints,)
         )
-        penalizer_state = MultiAugmentedLagrangianParams(
-            cfg.agent.penalizer.lagrange_multiplier,
-            cfg.agent.penalizer.penalty_multiplier,
+        c_vec = jnp.broadcast_to(
+            cfg.agent.penalizer.penalty_multiplier, (n_constraints,)
+        )
+        penalizer_state = AugmentedLagrangianParams(
+            lagrange_multiplier=lam_vec,
+            penalty_multiplier=c_vec,
         )
     else:
         raise ValueError(f"Unknown penalizer {cfg.agent.penalizer.name}")

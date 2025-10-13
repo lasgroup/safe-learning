@@ -1,0 +1,4 @@
+name: multi_lagrangian
+lagrange_multiplier: 0.0001
+penalty_multiplier: 5e-8
+penalty_multiplier_factor: 8e-6

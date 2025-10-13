@@ -2,6 +2,7 @@
 defaults:
   - override /environment: cartpole_swingup
   - override /agent: sbsrl
+  - override /agent/penalizer: multi_lagrangian
   - _self_
 
 training:

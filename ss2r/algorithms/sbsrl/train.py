@@ -456,6 +456,7 @@ def train(
         use_bro=use_bro,
         normalize_fn=normalize_fn,
         ensemble_size=model_ensemble_size,
+        safe=safe,
         target_entropy=target_entropy,
     )
     alpha_update = (

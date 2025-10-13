@@ -4,7 +4,7 @@ defaults:
   - override /agent: sbsrl
   - override /agent/data_collection: episodic
   - override /agent/cost_robustness: pessimistic_cost_update
-  - override /agent/penalizer: lagrangian
+  - override /agent/penalizer: multi_lagrangian
   - _self_
 
 training:

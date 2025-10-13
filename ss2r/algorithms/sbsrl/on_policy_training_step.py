@@ -240,6 +240,7 @@ def make_on_policy_training_step(
             training_state.normalizer_params,
             training_state.behavior_qr_params,
             training_state.behavior_qc_params,
+            training_state.model_params,
             alpha,
             transitions,
             key_actor,

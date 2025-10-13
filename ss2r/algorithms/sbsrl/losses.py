@@ -42,6 +42,7 @@ def make_losses(
     use_bro: bool,
     normalize_fn,
     ensemble_size,
+    safe,
     target_entropy: float | None = None,
 ):
     target_entropy = -0.5 * action_size if target_entropy is None else target_entropy
@@ -130,6 +131,7 @@ def make_losses(
         normalizer_params: Any,
         qr_params: Params,
         qc_params: Params | None,
+        model_params: Params,
         alpha: jnp.ndarray,
         transitions: Transition,
         key: PRNGKey,
@@ -163,8 +165,18 @@ def make_losses(
             qr = jnp.min(qr_action, axis=-1)
         actor_loss = -qr.mean()
         exploration_loss = (alpha * log_prob).mean()
-        aux = {}
-        if penalizer is not None:
+
+        # uncertainty constraint
+        model_apply = jax.vmap(sbsrl_network.model_network.apply, (None, 0, None, None))
+        (next_obs_pred, reward_pred, cost_pred) = model_apply(
+            normalizer_params, model_params, transitions.observation, action
+        )
+        disagreement = jnp.mean(jnp.std(next_obs_pred, axis=0))
+        constraints_list = []
+        constraints_list.append(disagreement)
+        aux = {"disagreement": disagreement}
+
+        if safe:
             assert qc_network is not None
             qc_action = jax.vmap(
                 lambda i: qc_network.apply(
@@ -179,14 +191,21 @@ def make_losses(
             constraint = (
                 safety_budget - mean_qc.max()
             )  # TODO: is this different from asking that all of them satisfy the constraint?
-            actor_loss, penalizer_aux, penalizer_params = penalizer(
-                actor_loss, constraint, jax.lax.stop_gradient(penalizer_params)
-            )
+            constraints_list.insert(0, constraint)
             aux["constraint_estimate"] = constraint
             aux["cost"] = mean_qc.mean()
+            aux["qc_std"] = jnp.std(mean_qc)
+        # penalizer
+        constraints_arr = jnp.stack(constraints_list)
+        if penalizer is not None:
+            actor_loss, penalizer_aux, penalizer_params = penalizer(
+                actor_loss, constraints_arr, jax.lax.stop_gradient(penalizer_params)
+            )
             aux["penalizer_params"] = penalizer_params
             aux |= penalizer_aux
-            aux["qc_std"] = jnp.std(mean_qc)
+        else:
+            aux["penalizer_params"] = penalizer_params
+
         aux["qr_std"] = jnp.std(jnp.mean(qr, axis=-1))
         actor_loss += exploration_loss
         return actor_loss, aux

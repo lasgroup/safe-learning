@@ -37,7 +37,7 @@ reset_on_eval: true
 store_buffer: false
 n_critics: 2
 n_heads: 1
-model_ensemble_size: 2
+model_ensemble_size: 5
 embedding_dim: 4
 unroll_length: 1
 num_model_rollouts: 400

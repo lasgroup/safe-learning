@@ -30,4 +30,4 @@ agent:
   n_critics: 2
   n_heads: 1
   data_collection:
-    wait_time_sec: 60
+    wait_time_sec: 120

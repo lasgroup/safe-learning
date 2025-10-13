@@ -18,6 +18,7 @@ training:
 
 agent:
   min_replay_size: 1000
+  max_replay_size: 500000
   replay_buffer:
     wandb_ids:
       - 02anvfes

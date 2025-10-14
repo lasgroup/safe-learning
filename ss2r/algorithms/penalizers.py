@@ -255,7 +255,9 @@ def get_penalizer(cfg):
         if n_constraints == 0:
             return None, None
         penalizer = PrimalDualLagrangian(cfg.agent.penalizer.learning_rate)
-        init_multipliers = jnp.zeros(n_constraints)
+        init_multipliers = cfg.agent.penalizer.initial_multiplier * jnp.ones(
+            n_constraints
+        )
         penalizer_state = PrimalDualLagrangianParams(
             lagrange_multiplier=init_multipliers
         )

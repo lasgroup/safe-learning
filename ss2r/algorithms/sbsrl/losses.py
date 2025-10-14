@@ -192,7 +192,7 @@ def make_losses(
                     jnp.full((transitions.observation.shape[0],), i, dtype=jnp.int32),
                 )
             )(idxs)  # (E, B, n_critics)
-            mean_qc = jnp.mean(jnp.max(qc_action, axis=2), axis=1)
+            mean_qc = jnp.mean(qc_action, axis=(1, 2))
             safety_constraint = safety_budget - mean_qc
             constraints_list.append(safety_constraint)
             aux["constraint_estimate"] = safety_constraint

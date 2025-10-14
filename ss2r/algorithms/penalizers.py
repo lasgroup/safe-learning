@@ -112,6 +112,33 @@ def update_augmented_lagrangian(
     return AugmentedLagrangianParams(new_lagrange_multiplier, new_penalty_multiplier)
 
 
+class PrimalDualLagrangianParams(NamedTuple):
+    lagrange_multiplier: jax.Array
+
+
+class PrimalDualLagrangian:
+    def __init__(self, lr: float):
+        self.lr = lr
+
+    def __call__(
+        self,
+        actor_loss: jax.Array,
+        constraints: jax.Array,
+        params: PrimalDualLagrangianParams,
+    ) -> tuple[jax.Array, dict[str, Any], PrimalDualLagrangianParams]:
+        multipliers = params.lagrange_multiplier
+
+        g = -constraints
+        actor_loss += jnp.sum(multipliers * g)
+
+        new_multipliers = jnp.maximum(multipliers + self.lr * g, 0.0)
+
+        new_params = PrimalDualLagrangianParams(lagrange_multiplier=new_multipliers)
+
+        aux = {"lagrange_multipliers": new_multipliers}
+        return actor_loss, aux, new_params
+
+
 class LagrangianParams(NamedTuple):
     lagrange_multiplier: jax.Array
     optimizer_state: optax.OptState
@@ -219,20 +246,14 @@ def get_penalizer(cfg):
         )
         penalizer_state = LBSGDParams(cfg.agent.penalizer.initial_eta)
     elif cfg.agent.penalizer.name == "multi_lagrangian":
-        penalizer = AugmentedLagrangian(cfg.agent.penalizer.penalty_multiplier_factor)
+        penalizer = PrimalDualLagrangian(cfg.agent.penalizer.learning_rate)
         # broadcast scalar config parameters to a vector if multiple constraints are needed
         n_constraints = 1
         if cfg.training["safe"]:
             n_constraints = 2
-        lam_vec = jnp.broadcast_to(
-            cfg.agent.penalizer.lagrange_multiplier, (n_constraints,)
-        )
-        c_vec = jnp.broadcast_to(
-            cfg.agent.penalizer.penalty_multiplier, (n_constraints,)
-        )
-        penalizer_state = AugmentedLagrangianParams(
-            lagrange_multiplier=lam_vec,
-            penalty_multiplier=c_vec,
+        init_multipliers = jnp.zeros(n_constraints)
+        penalizer_state = PrimalDualLagrangianParams(
+            lagrange_multiplier=init_multipliers
         )
     else:
         raise ValueError(f"Unknown penalizer {cfg.agent.penalizer.name}")

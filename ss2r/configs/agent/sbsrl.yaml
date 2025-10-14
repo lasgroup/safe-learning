@@ -55,3 +55,5 @@ target_entropy: null
 pessimistic_q: false
 pure_exploration_steps: null
 training_step_fn: on_policy
+uncertainty_constraint: false
+uncertainty_epsilon: 0.0

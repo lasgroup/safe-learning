@@ -43,6 +43,8 @@ def make_losses(
     normalize_fn,
     ensemble_size,
     safe,
+    uncertainty_constraint,
+    uncertainty_epsilon,
     target_entropy: float | None = None,
 ):
     target_entropy = -0.5 * action_size if target_entropy is None else target_entropy
@@ -166,15 +168,18 @@ def make_losses(
         actor_loss = -qr.mean()
         exploration_loss = (alpha * log_prob).mean()
 
-        # uncertainty constraint
-        model_apply = jax.vmap(sbsrl_network.model_network.apply, (None, 0, None, None))
-        (next_obs_pred, reward_pred, cost_pred) = model_apply(
-            normalizer_params, model_params, transitions.observation, action
-        )
-        disagreement = jnp.mean(jnp.std(next_obs_pred, axis=0))
+        aux = {}
         constraints_list = []
-        constraints_list.append(disagreement)
-        aux = {"disagreement": disagreement}
+        if uncertainty_constraint:
+            model_apply = jax.vmap(
+                sbsrl_network.model_network.apply, (None, 0, None, None)
+            )
+            (next_obs_pred, reward_pred, cost_pred) = model_apply(
+                normalizer_params, model_params, transitions.observation, action
+            )
+            disagreement = jnp.mean(jnp.std(next_obs_pred, axis=0))
+            constraints_list.append(disagreement - uncertainty_epsilon)
+            aux["disagreement"] = disagreement
 
         if safe:
             assert qc_network is not None
@@ -187,24 +192,23 @@ def make_losses(
                     jnp.full((transitions.observation.shape[0],), i, dtype=jnp.int32),
                 )
             )(idxs)  # (E, B, n_critics)
-            mean_qc = jnp.mean(qc_action, axis=(1, 2))
-            constraint = (
-                safety_budget - mean_qc.max()
-            )  # TODO: is this different from asking that all of them satisfy the constraint?
-            constraints_list.insert(0, constraint)
-            aux["constraint_estimate"] = constraint
+            mean_qc = jnp.mean(jnp.max(qc_action, axis=2), axis=1)
+            safety_constraint = safety_budget - mean_qc
+            constraints_list.append(safety_constraint)
+            aux["constraint_estimate"] = safety_constraint
             aux["cost"] = mean_qc.mean()
             aux["qc_std"] = jnp.std(mean_qc)
-        # penalizer
-        constraints_arr = jnp.stack(constraints_list)
+
         if penalizer is not None:
+            # penalizer
+            constraints_arr = jnp.concatenate(
+                [jnp.atleast_1d(c) for c in constraints_list], axis=0
+            )
             actor_loss, penalizer_aux, penalizer_params = penalizer(
                 actor_loss, constraints_arr, jax.lax.stop_gradient(penalizer_params)
             )
             aux["penalizer_params"] = penalizer_params
             aux |= penalizer_aux
-        else:
-            aux["penalizer_params"] = penalizer_params
 
         aux["qr_std"] = jnp.std(jnp.mean(qr, axis=-1))
         actor_loss += exploration_loss

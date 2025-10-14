@@ -246,11 +246,15 @@ def get_penalizer(cfg):
         )
         penalizer_state = LBSGDParams(cfg.agent.penalizer.initial_eta)
     elif cfg.agent.penalizer.name == "multi_lagrangian":
-        penalizer = PrimalDualLagrangian(cfg.agent.penalizer.learning_rate)
         # broadcast scalar config parameters to a vector if multiple constraints are needed
-        n_constraints = 1
+        n_constraints = 0
+        if cfg.agent["uncertainty_constraint"]:
+            n_constraints += 1
         if cfg.training["safe"]:
-            n_constraints = 2
+            n_constraints += cfg.agent["model_ensemble_size"]
+        if n_constraints == 0:
+            return None, None
+        penalizer = PrimalDualLagrangian(cfg.agent.penalizer.learning_rate)
         init_multipliers = jnp.zeros(n_constraints)
         penalizer_state = PrimalDualLagrangianParams(
             lagrange_multiplier=init_multipliers

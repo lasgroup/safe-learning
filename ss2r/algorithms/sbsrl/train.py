@@ -196,6 +196,8 @@ def train(
     restore_checkpoint_path: Optional[str] = None,
     eval_env: Optional[envs.Env] = None,
     safe: bool = False,
+    uncertainty_constraint: bool = False,
+    uncertainty_epsilon: float = 0.0,
     safety_budget: float = float("inf"),
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
@@ -457,6 +459,8 @@ def train(
         normalize_fn=normalize_fn,
         ensemble_size=model_ensemble_size,
         safe=safe,
+        uncertainty_constraint=uncertainty_constraint,
+        uncertainty_epsilon=uncertainty_epsilon,
         target_entropy=target_entropy,
     )
     alpha_update = (

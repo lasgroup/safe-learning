@@ -6,7 +6,7 @@ defaults:
   - _self_
 
 training:
-  num_timesteps: 80000
+  num_timesteps: 150000
   action_repeat: 4
   safe: true
   train_domain_randomization: false

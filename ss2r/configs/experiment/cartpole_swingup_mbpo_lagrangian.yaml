@@ -1,8 +1,8 @@
 # @package _global_
 defaults:
   - override /environment: cartpole_swingup
-  - override /agent: sbsrl
-  - override /agent/penalizer: multi_lagrangian
+  - override /agent: mbpo
+  - override /agent/penalizer: lagrangian
   - _self_
 
 training:

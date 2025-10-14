@@ -22,7 +22,7 @@ agent:
   replay_buffer:
     wandb_ids:
       - 02anvfes
-    mix: [0.5, 0.0, 10000]
+    mix: [0.5, 0.0, 15000]
   grad_updates_per_step: 1250
   learning_rate: 1e-5
   critic_learning_rate: 3e-4

@@ -12,9 +12,10 @@ training:
   eval_domain_randomization: true
   num_eval_envs: 128
   render: true
+  wandb_id: 2qjg8bz5
   
 environment:
   task_params:
     command_config:
-      a: [1., 0.8, 1.2]
+      a: [1.5, 0.8, 1.2]
   

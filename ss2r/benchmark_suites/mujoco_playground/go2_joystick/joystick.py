@@ -282,7 +282,7 @@ class Joystick(go2_base.Go2Env):
         return state
 
     def _get_termination(self, data: mjx.Data) -> jax.Array:
-        fall_termination = self.get_upvector(data)[-1] < 0.0
+        fall_termination = self.get_upvector(data)[-1] < -0.5
         return fall_termination
 
     def _get_obs(self, data: mjx.Data, info: dict[str, Any]) -> Dict[str, jax.Array]:

@@ -6,22 +6,24 @@ defaults:
   - _self_
 
 training:
-  num_timesteps: 150000
+  num_timesteps: 5000000
   action_repeat: 4
   safe: true
   train_domain_randomization: false
   eval_domain_randomization: false
   safety_budget: 100
-  num_envs: 10
+  num_envs: 128
   num_evals: 20
+  num_eval_envs: 128
 
 agent:
   policy_hidden_layer_sizes: [256, 256, 256]
   value_hidden_layer_sizes: [512, 512]
   activation: swish
-  batch_size: 256
+  batch_size: 512
   min_replay_size: 5000
   max_replay_size: 1048576
   critic_grad_updates_per_step: 50
-  model_grad_updates_per_step: 500
-  num_model_rollouts: 400
+  model_grad_updates_per_step: 50
+  num_model_rollouts: 200
+  embedding_dim: 32

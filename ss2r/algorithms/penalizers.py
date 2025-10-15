@@ -248,9 +248,9 @@ def get_penalizer(cfg):
     elif cfg.agent.penalizer.name == "multi_lagrangian":
         # broadcast scalar config parameters to a vector if multiple constraints are needed
         n_constraints = 0
-        if cfg.agent["uncertainty_constraint"]:
+        if cfg.agent.get("uncertainty_constraint", False):
             n_constraints += 1
-        if cfg.training["safe"]:
+        if cfg.training.get("safe", False):
             n_constraints += cfg.agent["model_ensemble_size"]
         if n_constraints == 0:
             return None, None

@@ -4,11 +4,11 @@ import ss2r.algorithms.sbsrl.networks as sbsrl_networks
 import ss2r.algorithms.sbsrl.vision_networks as sbsrl_vision_networks
 from ss2r.algorithms.penalizers import get_penalizer
 from ss2r.algorithms.sac.data import get_collection_fn
-from ss2r.algorithms.sac.q_transforms import (
+from ss2r.algorithms.sbsrl import on_policy_training_step
+from ss2r.algorithms.sbsrl.q_transforms import (
     get_cost_q_transform,
     get_reward_q_transform,
 )
-from ss2r.algorithms.sbsrl import on_policy_training_step
 
 
 def get_training_step_fn(cfg):
@@ -58,8 +58,6 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
         del agent_cfg["data_collection"]
     if "training_step_fn" in agent_cfg:
         del agent_cfg["training_step_fn"]
-    if "pessimistic_q" in agent_cfg:
-        del agent_cfg["pessimistic_q"]
     if "use_vision" in agent_cfg and agent_cfg["use_vision"]:
         network_factory = functools.partial(
             sbsrl_vision_networks.make_sbsrl_vision_networks,

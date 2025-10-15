@@ -5,7 +5,7 @@ defaults:
   - data_collection: step
   - penalizer: null
 
-name: mbpo
+name: sbsrl
 learning_rate: 3e-4
 critic_learning_rate: 3e-4
 model_learning_rate: 3e-4
@@ -37,12 +37,13 @@ reset_on_eval: true
 store_buffer: false
 n_critics: 2
 n_heads: 1
-model_ensemble_size: 5
+model_ensemble_size: 2
+embedding_dim: 4
 unroll_length: 1
 num_model_rollouts: 400
 optimism: 0.
 pessimism: 0.
-model_propagation: random
+model_propagation: all
 use_termination: true
 safety_filter: null
 advantage_threshold: 0.2
@@ -51,6 +52,6 @@ learn_from_scratch: false
 load_auxiliaries: false
 load_normalizer: true
 target_entropy: null
+pessimistic_q: false
 pure_exploration_steps: null
 training_step_fn: on_policy
-pessimistic_q: false

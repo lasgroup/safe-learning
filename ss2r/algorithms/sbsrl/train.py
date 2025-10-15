@@ -37,7 +37,6 @@ import ss2r.algorithms.sbsrl.networks as sbsrl_networks
 from ss2r.algorithms.penalizers import Params, Penalizer
 from ss2r.algorithms.sac import gradients
 from ss2r.algorithms.sac.data import collect_single_step
-from ss2r.algorithms.sac.q_transforms import QTransformation, SACBase, SACCost
 from ss2r.algorithms.sac.types import (
     CollectDataFn,
     Metrics,
@@ -48,6 +47,11 @@ from ss2r.algorithms.sac.types import (
 from ss2r.algorithms.sbsrl import safety_filters
 from ss2r.algorithms.sbsrl.model_env import create_model_env
 from ss2r.algorithms.sbsrl.on_policy_training_step import make_on_policy_training_step
+from ss2r.algorithms.sbsrl.q_transforms import (
+    QTransformation,
+    SACBaseEnsemble,
+    SACCostEnsemble,
+)
 from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 from ss2r.rl.evaluation import ConstraintsEvaluator, InterventionConstraintsEvaluator
 from ss2r.rl.utils import restore_state
@@ -87,6 +91,7 @@ def _init_training_state(
     qc_optimizer: optax.GradientTransformation,
     model_optimizer: optax.GradientTransformation,
     model_ensemble_size: int,
+    embedding_dim: int,
     penalizer_params: Params | None,
 ) -> TrainingState:
     """Inits the training state and replicates it over devices."""
@@ -185,6 +190,7 @@ def train(
     n_critics: int = 2,
     n_heads: int = 1,
     model_ensemble_size: int = 1,
+    embedding_dim: int = 4,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     checkpoint_logdir: Optional[str] = None,
     restore_checkpoint_path: Optional[str] = None,
@@ -193,8 +199,8 @@ def train(
     safety_budget: float = float("inf"),
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
-    reward_q_transform: QTransformation = SACBase(),
-    cost_q_transform: QTransformation = SACCost(),
+    reward_q_transform: QTransformation = SACBaseEnsemble(),
+    cost_q_transform: QTransformation = SACCostEnsemble(),
     use_bro: bool = True,
     normalize_budget: bool = True,
     reset_on_eval: bool = True,
@@ -211,6 +217,7 @@ def train(
     load_normalizer: bool = True,
     target_entropy: float | None = None,
     pure_exploration_steps: int | None = None,
+    pessimistic_q: bool = False,
 ):
     if min_replay_size >= num_timesteps:
         raise ValueError(
@@ -267,6 +274,8 @@ def train(
         use_bro=use_bro,
         n_critics=n_critics,
         n_heads=n_heads,
+        ensemble_size=model_ensemble_size,
+        embedding_dim=embedding_dim,
     )
     alpha_optimizer = optax.adam(learning_rate=alpha_learning_rate)
     make_optimizer = lambda lr, grad_clip_norm: optax.chain(
@@ -321,6 +330,7 @@ def train(
         qc_optimizer=qc_optimizer,
         model_optimizer=model_optimizer,
         model_ensemble_size=model_ensemble_size,
+        embedding_dim=embedding_dim,
         penalizer_params=penalizer_params,
     )
     del global_key
@@ -332,9 +342,27 @@ def train(
         dummy_data_sample=dummy_transition,
         sample_batch_size=batch_size * model_grad_updates_per_step,
     )
+
+    sac_extras = {
+        "state_extras": {
+            "truncation": jnp.zeros((model_ensemble_size,)),
+        },
+        "policy_extras": {},
+    }
+    if safe:
+        sac_extras["state_extras"]["cost"] = jnp.zeros((model_ensemble_size,))  # type: ignore
+    dummy_transition_sac = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
+        observation=dummy_obs,
+        action=dummy_action,
+        reward=jnp.zeros((model_ensemble_size,)),
+        discount=jnp.zeros((model_ensemble_size,)),
+        next_observation=jnp.zeros((model_ensemble_size, obs_size)),
+        extras=sac_extras,
+    )
+    dummy_transition_sac = float16(dummy_transition_sac)
     sac_replay_buffer = replay_buffers.UniformSamplingQueue(
         max_replay_size=max_replay_size,
-        dummy_data_sample=dummy_transition,
+        dummy_data_sample=dummy_transition_sac,
         sample_batch_size=sac_batch_size * critic_grad_updates_per_step,
     )
     model_buffer_state = model_replay_buffer.init(model_rb_key)
@@ -427,6 +455,7 @@ def train(
         action_size=action_size,
         use_bro=use_bro,
         normalize_fn=normalize_fn,
+        ensemble_size=model_ensemble_size,
         target_entropy=target_entropy,
     )
     alpha_update = (
@@ -510,6 +539,8 @@ def train(
         safety_filter,
         offline,
         pure_exploration_steps,
+        model_ensemble_size,
+        sac_batch_size,
     )
 
     def prefill_replay_buffer(

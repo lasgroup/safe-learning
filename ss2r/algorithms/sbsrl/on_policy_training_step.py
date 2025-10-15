@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -54,7 +54,53 @@ def make_on_policy_training_step(
     safety_filter,
     offline,
     pure_exploration_steps,
+    ensemble_size,
+    sac_batch_size,
 ) -> TrainingStepFn:
+    def split_transitions_ensemble(
+        transitions: Transition, ensemble_axis: int = 1
+    ) -> Transition:
+        def _per_ens_leaf(x):
+            x = jnp.asarray(x)
+            if x.ndim > ensemble_axis and x.shape[ensemble_axis] == ensemble_size:
+                perm = list(range(x.ndim))
+                perm.pop(ensemble_axis)
+                perm = [ensemble_axis] + perm
+                return jnp.transpose(x, axes=perm)
+            else:
+                expanded = jnp.expand_dims(x, axis=0)
+                target_shape = (ensemble_size,) + x.shape
+                return jnp.broadcast_to(expanded, target_shape)
+
+        trans_per_ens = jax.tree_util.tree_map(_per_ens_leaf, transitions)
+
+        # add index of ensemble prediction as an extra field
+        idx = jnp.arange(ensemble_size, dtype=jnp.int32)[:, None, None]
+        idx = jnp.broadcast_to(idx, (ensemble_size, sac_batch_size, 1))
+        new_extras = {
+            **trans_per_ens.extras,
+            "state_extras": {
+                **trans_per_ens.extras.get("state_extras", {}),
+                "idx": idx,
+            },
+        }
+        trans_per_ens = trans_per_ens._replace(extras=new_extras)
+        return trans_per_ens
+
+    def scan_update(update_callable, init_params, init_opt_state, trans_per_ens, keys):
+        def _body(carry, elems):
+            params, opt_state = carry
+            trans_single, key_i = elems
+            loss_i, new_params, new_opt_state = update_callable(
+                params, opt_state, trans_single, key_i
+            )
+            return (new_params, new_opt_state), loss_i
+
+        (final_params, final_opt_state), losses = jax.lax.scan(
+            _body, (init_params, init_opt_state), (trans_per_ens, keys)
+        )
+        return final_params, final_opt_state, losses
+
     def critic_sgd_step(
         carry: Tuple[TrainingState, PRNGKey], transitions: Transition
     ) -> Tuple[Tuple[TrainingState, PRNGKey], Metrics]:
@@ -62,61 +108,70 @@ def make_on_policy_training_step(
         key, key_critic = jax.random.split(key)
         transitions = float32(transitions)
         alpha = jnp.exp(training_state.alpha_params) + min_alpha
-        critic_loss, behavior_qr_params, behavior_qr_optimizer_state = critic_update(
-            training_state.behavior_qr_params,
+
+        # reshape transitions with leading ensemble size
+        trans_per_ens = split_transitions_ensemble(transitions, ensemble_axis=1)
+
+        # reward critic update for each ensemble prediction
+        _, *ens_keys_reward = jax.random.split(key_critic, ensemble_size + 1)
+        ens_keys_reward = jnp.stack(ens_keys_reward)
+        reward_updater = lambda params, opt_state, trans_single, key_i: critic_update(
+            params,
             training_state.behavior_policy_params,
             training_state.normalizer_params,
             training_state.behavior_target_qr_params,
             alpha,
-            transitions,
-            key_critic,
+            trans_single,
+            key_i,
             reward_q_transform,
-            optimizer_state=training_state.behavior_qr_optimizer_state,
-            params=training_state.behavior_qr_params,
+            optimizer_state=opt_state,
+            params=params,
         )
+        behavior_qr_params, behavior_qr_optimizer_state, ensemble_losses = scan_update(
+            reward_updater,
+            training_state.behavior_qr_params,
+            training_state.behavior_qr_optimizer_state,
+            trans_per_ens,
+            ens_keys_reward,
+        )
+        critic_loss = jnp.mean(ensemble_losses)
+
         if safe:
             cost_metrics = {}
-            if safety_filter is not None:
-                (
-                    backup_cost_critic_loss,
-                    backup_qc_params,
-                    backup_qc_optimizer_state,
-                ) = cost_critic_update(
-                    training_state.backup_qc_params,
-                    training_state.backup_policy_params,
-                    training_state.normalizer_params,
-                    training_state.backup_target_qc_params,
-                    alpha,
-                    transitions,
-                    key_critic,
-                    cost_q_transform,
-                    True,
-                    optimizer_state=training_state.backup_qc_optimizer_state,
-                    params=training_state.backup_qc_params,
-                )
-                cost_metrics["backup_cost_critic_loss"] = backup_cost_critic_loss
-            else:
-                backup_qc_params = training_state.backup_qc_params
-                backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
+            backup_qc_params = training_state.backup_qc_params
+            backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
             if penalizer is not None:
+                # cost critic update for each ensemble prediction
+                key, key_cost = jax.random.split(key)
+                _, *ens_keys_cost = jax.random.split(key_cost, ensemble_size + 1)
+                ens_keys_cost = jnp.stack(ens_keys_cost)
+                cost_updater = (
+                    lambda params, opt_state, trans_single, key_i: cost_critic_update(
+                        params,
+                        training_state.behavior_policy_params,
+                        training_state.normalizer_params,
+                        training_state.behavior_target_qc_params,
+                        alpha,
+                        trans_single,
+                        key_i,
+                        cost_q_transform,
+                        True,
+                        optimizer_state=opt_state,
+                        params=params,
+                    )
+                )
                 (
-                    behavior_cost_critic_loss,
                     behavior_qc_params,
                     behavior_qc_optimizer_state,
-                ) = cost_critic_update(
+                    cost_losses,
+                ) = scan_update(
+                    cost_updater,
                     training_state.behavior_qc_params,
-                    training_state.behavior_policy_params,
-                    training_state.normalizer_params,
-                    training_state.behavior_target_qc_params,
-                    alpha,
-                    transitions,
-                    key_critic,
-                    cost_q_transform,
-                    True,
-                    optimizer_state=training_state.behavior_qc_optimizer_state,
-                    params=training_state.behavior_qc_params,
+                    training_state.behavior_qc_optimizer_state,
+                    trans_per_ens,
+                    ens_keys_cost,
                 )
-                cost_metrics["behavior_cost_critic_loss"] = behavior_cost_critic_loss
+                cost_metrics["behavior_cost_critic_loss"] = jnp.mean(cost_losses)
             else:
                 behavior_qc_params = training_state.behavior_qc_params
                 behavior_qc_optimizer_state = training_state.behavior_qc_optimizer_state
@@ -273,114 +328,18 @@ def make_on_policy_training_step(
         key = keys[0]
         key_generate_unroll = keys[1]
         rollout_keys = keys[2:]
-        state = planning_env.reset(rollout_keys)
-        _, transitions = acting.generate_unroll(
-            planning_env,
-            state,
-            policy,
-            key_generate_unroll,
-            unroll_length,
-            extra_fields=extra_fields,
+
+        if unroll_length != 1:
+            raise ValueError("Unrolls with more than one step not supported")
+        state = planning_env.reset(rollout_keys)  # one-step rollout
+        _, transitions = acting.actor_step(
+            planning_env, state, policy, key_generate_unroll, extra_fields=extra_fields
         )
-        transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), transitions)
         sac_replay_buffer_state = sac_replay_buffer.insert(
             sac_replay_buffer_state, float16(transitions)
         )
+
         return sac_replay_buffer_state
-
-    def relabel_transitions(
-        planning_env: ModelBasedEnv,
-        transitions: Transition,
-        training_step: int,
-    ) -> Tuple[Transition, Dict[str, Any]]:
-        pred_fn = planning_env.model_network.apply
-        model_params = planning_env.model_params
-        normalizer_params = planning_env.normalizer_params
-        vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
-        next_obs_pred, reward, cost = vmap_pred_fn(
-            normalizer_params, model_params, transitions.observation, transitions.action
-        )
-
-        pred_backup_action = planning_env.policy_network.apply
-        backup_policy_params = planning_env.backup_policy_params
-        backup_action = pred_backup_action(
-            normalizer_params, backup_policy_params, transitions.observation
-        )[..., : planning_env.action_size]
-        disagreement = (
-            next_obs_pred.std(axis=0).mean(-1)
-            if isinstance(next_obs_pred, jax.Array)
-            else next_obs_pred["state"].std(axis=0).mean(-1)
-        )
-        new_reward = reward.mean(0) + disagreement * optimism
-        if pure_exploration_steps is not None:
-            new_reward = jnp.where(
-                training_step < pure_exploration_steps,
-                disagreement * optimism,
-                new_reward,
-            )
-        discount = transitions.discount
-        metrics = {"disagreement": disagreement}
-        if safe:
-            cost = cost.mean(0) + disagreement * pessimism
-            transitions.extras["state_extras"]["cost"] = cost
-            if (planning_env.qc_network is not None) and use_termination:
-                if safety_filter == "sooper":
-                    qc_pred = planning_env.qc_network.apply(
-                        normalizer_params,
-                        planning_env.backup_qc_params,
-                        transitions.observation,
-                        transitions.action,
-                    )
-                    expected_total_cost = (
-                        scaling_fn(qc_pred.mean(axis=-1))
-                        + transitions.observation["cumulative_cost"].squeeze()
-                    )
-                    discount = jnp.where(
-                        expected_total_cost > planning_env.safety_budget,
-                        jnp.zeros_like(cost, dtype=jnp.float32),
-                        jnp.ones_like(cost, dtype=jnp.float32),
-                    )
-                    pred_qr = planning_env.qr_network.apply
-                    backup_qr_params = planning_env.backup_qr_params
-                    pessimistic_qr_pred = pred_qr(
-                        normalizer_params,
-                        backup_qr_params,
-                        transitions.observation,
-                        backup_action,
-                    ).mean(axis=-1)
-                    new_reward = jnp.where(discount, new_reward, pessimistic_qr_pred)
-                    metrics["pessimistic_qr_pred"] = pessimistic_qr_pred
-                elif safety_filter in ["advantage", "advantage_g2g_reset"]:
-                    qc_backup = planning_env.qc_network.apply(
-                        normalizer_params,
-                        planning_env.backup_qc_params,
-                        transitions.observation,
-                        backup_action,
-                    ).mean(axis=-1)
-                    qc_behavioral = planning_env.qc_network.apply(
-                        normalizer_params,
-                        planning_env.backup_qc_params,
-                        transitions.observation,
-                        transitions.action,
-                    ).mean(axis=-1)
-                    advantage = qc_behavioral - qc_backup
-                    discount = jnp.where(
-                        advantage > planning_env.safety_budget,
-                        jnp.zeros_like(cost, dtype=jnp.float32),
-                        jnp.ones_like(cost, dtype=jnp.float32),
-                    )
-                    new_reward = jnp.where(
-                        discount, new_reward, jnp.zeros_like(new_reward)
-                    )
-        next_obs_pred = jax.tree_map(lambda x: x.mean(0), next_obs_pred)
-        return Transition(
-            observation=transitions.observation,
-            next_observation=next_obs_pred,
-            action=transitions.action,
-            reward=new_reward,
-            discount=discount,
-            extras=transitions.extras,
-        ), metrics
 
     def training_step(
         training_state: TrainingState,
@@ -430,26 +389,10 @@ def make_on_policy_training_step(
         )
         # Train SAC with model data
         sac_buffer_state, model_transitions = sac_replay_buffer.sample(sac_buffer_state)
-        num_real_transitions = int(
-            model_transitions.reward.shape[0] * (1 - model_to_real_data_ratio)
-        )
-        assert (
-            num_real_transitions <= transitions.reward.shape[0]
-        ), "More model minibatches than real minibatches"
-        if num_real_transitions >= 1:
-            transitions = jax.tree_util.tree_map(
-                lambda x, y: x.at[:num_real_transitions].set(y[:num_real_transitions]),
-                model_transitions,
-                transitions,
-            )
-        else:
-            transitions = model_transitions
+        transitions = model_transitions
         transitions = jax.tree_util.tree_map(
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),
             transitions,
-        )
-        transitions, more_metrics = relabel_transitions(
-            planning_env, transitions, training_state.env_steps
         )
         (training_state, _), critic_metrics = jax.lax.scan(
             critic_sgd_step, (training_state, training_key), transitions
@@ -470,7 +413,6 @@ def make_on_policy_training_step(
         metrics = {**model_metrics, **critic_metrics, **actor_metrics}
         metrics["buffer_current_size"] = model_replay_buffer.size(model_buffer_state)
         metrics |= env_state.metrics
-        metrics |= more_metrics
         return (
             training_state,
             env_state,

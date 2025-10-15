@@ -36,6 +36,9 @@ import ss2r.algorithms.mbpo.losses as mbpo_losses
 import ss2r.algorithms.mbpo.networks as mbpo_networks
 from ss2r.algorithms.mbpo import safety_filters
 from ss2r.algorithms.mbpo.model_env import create_model_env
+from ss2r.algorithms.mbpo.non_episodic_training_step import (
+    make_non_episodic_training_step,
+)
 from ss2r.algorithms.mbpo.on_policy_training_step import make_on_policy_training_step
 from ss2r.algorithms.mbpo.types import TrainingState, TrainingStepFn
 from ss2r.algorithms.penalizers import Params, Penalizer
@@ -474,43 +477,70 @@ def train(
         safety_filter=safety_filter,
         initial_normalizer_params=training_state.normalizer_params,
     )
-    training_step = make_training_step_fn(
-        env,
-        make_planning_policy,
-        make_rollout_policy,
-        get_rollout_policy_params,
-        make_model_env,
-        model_replay_buffer,
-        sac_replay_buffer,
-        alpha_update,
-        critic_update,
-        cost_critic_update,
-        model_update,
-        actor_update,
-        safe,
-        min_alpha,
-        reward_q_transform,
-        cost_q_transform,
-        model_grad_updates_per_step,
-        critic_grad_updates_per_step,
-        extra_fields,
-        get_experience_fn,
-        env_steps_per_experience_call,
-        tau,
-        num_critic_updates_per_actor_update,
-        unroll_length,
-        num_model_rollouts,
-        optimism,
-        pessimism,
-        model_to_real_data_ratio,
-        budget_scaling_fn,
-        use_termination,
-        penalizer,
-        safety_budget,
-        safety_filter,
-        offline,
-        pure_exploration_steps,
-    )
+    if make_training_step_fn == make_on_policy_training_step:
+        training_step = make_training_step_fn(
+            env,
+            make_planning_policy,
+            make_rollout_policy,
+            get_rollout_policy_params,
+            make_model_env,
+            model_replay_buffer,
+            sac_replay_buffer,
+            alpha_update,
+            critic_update,
+            cost_critic_update,
+            model_update,
+            actor_update,
+            safe,
+            min_alpha,
+            reward_q_transform,
+            cost_q_transform,
+            model_grad_updates_per_step,
+            critic_grad_updates_per_step,
+            extra_fields,
+            get_experience_fn,
+            env_steps_per_experience_call,
+            tau,
+            num_critic_updates_per_actor_update,
+            unroll_length,
+            num_model_rollouts,
+            optimism,
+            pessimism,
+            model_to_real_data_ratio,
+            budget_scaling_fn,
+            use_termination,
+            penalizer,
+            safety_budget,
+            safety_filter,
+            offline,
+            pure_exploration_steps,
+        )
+    elif make_training_step_fn == make_non_episodic_training_step:
+        training_step = make_training_step_fn(
+            env,
+            make_rollout_policy,
+            get_rollout_policy_params,
+            model_replay_buffer,
+            sac_replay_buffer,
+            alpha_update,
+            critic_update,
+            cost_critic_update,
+            model_update,
+            actor_update,
+            safe,
+            min_alpha,
+            reward_q_transform,
+            cost_q_transform,
+            model_grad_updates_per_step,
+            critic_grad_updates_per_step,
+            extra_fields,
+            get_experience_fn,
+            env_steps_per_experience_call,
+            tau,
+            num_critic_updates_per_actor_update,
+            safety_budget,
+            mbpo_network.qc_network,
+        )
 
     def prefill_replay_buffer(
         training_state: TrainingState,
@@ -556,6 +586,7 @@ def train(
         TrainingState, envs.State, ReplayBufferState, ReplayBufferState, Metrics
     ]:
         def f(carry, unused_t):
+            del unused_t
             ts, es, mbs, acbs, k = carry
             k, new_key = jax.random.split(k)
             ts, es, mbs, acbs, metrics = training_step(ts, es, mbs, acbs, k)

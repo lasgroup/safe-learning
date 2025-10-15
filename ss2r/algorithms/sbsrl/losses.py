@@ -26,8 +26,8 @@ from brax.training import types
 from brax.training.types import Params, PRNGKey
 
 from ss2r.algorithms.penalizers import Penalizer
-from ss2r.algorithms.sac.q_transforms import QTransformation
 from ss2r.algorithms.sbsrl.networks import SBSRLNetworks
+from ss2r.algorithms.sbsrl.q_transforms import QTransformation
 
 Transition: TypeAlias = types.Transition
 
@@ -41,6 +41,7 @@ def make_losses(
     action_size: int,
     use_bro: bool,
     normalize_fn,
+    ensemble_size,
     target_entropy: float | None = None,
 ):
     target_entropy = -0.5 * action_size if target_entropy is None else target_entropy
@@ -84,7 +85,11 @@ def make_losses(
         scale = cost_scaling if safe else reward_scaling
         gamma = safety_discounting if safe else discounting
         q_old_action = qr_network.apply(
-            normalizer_params, q_params, transitions.observation, action
+            normalizer_params,
+            q_params,
+            transitions.observation,
+            action,
+            transitions.extras["state_extras"]["idx"],
         )
         key, another_key = jax.random.split(key)
 
@@ -101,8 +106,8 @@ def make_losses(
             next_action = parametric_action_distribution.postprocess(next_action)
             return next_action, next_log_prob
 
-        q_fn = lambda obs, action: qr_network.apply(
-            normalizer_params, target_q_params, obs, action
+        q_fn = lambda obs, action, idx: qr_network.apply(
+            normalizer_params, target_q_params, obs, action, idx
         )
         target_q = target_q_fn(
             transitions,
@@ -140,9 +145,18 @@ def make_losses(
         )
         log_prob = parametric_action_distribution.log_prob(dist_params, action)
         action = parametric_action_distribution.postprocess(action)
-        qr_action = qr_network.apply(
-            normalizer_params, qr_params, transitions.observation, action
-        )
+
+        idxs = jnp.arange(ensemble_size, dtype=jnp.int32)
+        qr_action = jax.vmap(
+            lambda i: qr_network.apply(
+                normalizer_params,
+                qr_params,
+                transitions.observation,
+                action,
+                jnp.full((transitions.observation.shape[0],), i, dtype=jnp.int32),
+            )
+        )(idxs)  # (E, B, n_critics)
+
         if use_bro:
             qr = jnp.mean(qr_action, axis=-1)
         else:
@@ -152,9 +166,15 @@ def make_losses(
         aux = {}
         if penalizer is not None:
             assert qc_network is not None
-            qc_action = qc_network.apply(
-                normalizer_params, qc_params, transitions.observation, action
-            )
+            qc_action = jax.vmap(
+                lambda i: qc_network.apply(
+                    normalizer_params,
+                    qc_params,
+                    transitions.observation,
+                    action,
+                    jnp.full((transitions.observation.shape[0],), i, dtype=jnp.int32),
+                )
+            )(idxs)  # (E, B, n_critics)
             mean_qc = jnp.mean(qc_action, axis=-1)
             constraint = safety_budget - mean_qc.mean()
             actor_loss, penalizer_aux, penalizer_params = penalizer(

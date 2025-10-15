@@ -19,11 +19,12 @@ class HumanoidGetup(humanoid.Humanoid):
 
     def __init__(
         self,
+        move_speed: float = 0.0,
         config: config_dict.ConfigDict = humanoid.default_config(),
         config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
     ):
         super().__init__(
-            move_speed=0.0, config=config, config_overrides=config_overrides
+            move_speed=move_speed, config=config, config_overrides=config_overrides
         )
 
     def _post_init(self):
@@ -108,9 +109,7 @@ class HumanoidGetup(humanoid.Humanoid):
             ground_init,
             normal_init,
         )
-        info = {
-            "rng": rng,
-        }
+        info = {"rng": rng, "cost": jp.zeros(())}
         metrics = {
             "reward/standing": jp.zeros(()),
             "reward/upright": jp.zeros(()),
@@ -121,3 +120,12 @@ class HumanoidGetup(humanoid.Humanoid):
         obs = self._get_obs(data, info)
         reward, done = jp.zeros(2)
         return mjx_env.State(data, obs, reward, done, metrics, info)
+
+    def step(self, state: mjx_env.State, action: jax.Array) -> mjx_env.State:
+        outs = super().step(state, action)
+        standing = self._head_height(outs.data) > humanoid._STAND_HEIGHT
+        upright = self._torso_upright(outs.data) > 0.9
+        outs.info["cost"] = jp.where(
+            standing | upright, jp.zeros_like(outs.reward), jp.ones_like(outs.reward)
+        )
+        return outs

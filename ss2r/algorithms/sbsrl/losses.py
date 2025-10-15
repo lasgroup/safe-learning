@@ -174,13 +174,12 @@ def make_losses(
             model_apply = jax.vmap(
                 sbsrl_network.model_network.apply, (None, 0, None, None)
             )
-            (next_obs_pred, reward_pred, cost_pred) = model_apply(
+            next_obs_pred, *_ = model_apply(
                 normalizer_params, model_params, transitions.observation, action
             )
             disagreement = jnp.mean(jnp.std(next_obs_pred, axis=0))
             constraints_list.append(disagreement - uncertainty_epsilon)
             aux["disagreement"] = disagreement
-
         if safe:
             assert qc_network is not None
             qc_action = jax.vmap(

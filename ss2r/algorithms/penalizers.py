@@ -81,7 +81,7 @@ class AugmentedLagrangian:
             "lagrangian_cond": cond,
             "lagrange_multiplier": new_params.lagrange_multiplier,
         }
-        return actor_loss + jnp.sum(psi), aux, new_params
+        return actor_loss + psi, aux, new_params
 
 
 def augmented_lagrangian(

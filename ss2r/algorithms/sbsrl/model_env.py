@@ -182,12 +182,9 @@ def _propagate_ensemble(
         cost = jnp.mean(cost_pred, axis=0)
     elif ensemble_selection == "all":
         vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
-        next_obs_pred, reward_pred, cost_pred = vmap_pred_fn(
+        next_obs, reward, cost = vmap_pred_fn(
             normalizer_params, model_params, obs, action
         )
-        next_obs = next_obs_pred
-        reward = reward_pred
-        cost = cost_pred
     else:
         raise ValueError(f"Unknown ensemble selection: {ensemble_selection}")
     return next_obs, reward, cost

@@ -38,7 +38,7 @@ store_buffer: false
 n_critics: 2
 n_heads: 1
 model_ensemble_size: 5
-embedding_dim: 4
+embedding_dim: 32
 unroll_length: 1
 num_model_rollouts: 400
 optimism: 0.

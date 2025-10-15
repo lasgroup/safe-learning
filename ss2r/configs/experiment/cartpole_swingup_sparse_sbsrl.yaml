@@ -16,5 +16,7 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: false
   action_repeat: 1
+
+agent:
   uncertainty_constraint: false
   uncertainty_epsilon: 0.0

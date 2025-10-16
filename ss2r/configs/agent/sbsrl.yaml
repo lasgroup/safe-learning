@@ -3,7 +3,7 @@ defaults:
   - reward_robustness: null
   - propagation: null
   - data_collection: step
-  - penalizer: null
+  - penalizer: multi_lagrangian
 
 name: sbsrl
 learning_rate: 3e-4

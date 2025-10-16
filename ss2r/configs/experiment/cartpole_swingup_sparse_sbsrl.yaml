@@ -2,6 +2,7 @@
 defaults:
   - cartpole_swingup_sparse_mbpo
   - override /agent: sbsrl
+  - override /agent/penalizer: multi_lagrangian
   - _self_
 
 environment:
@@ -18,5 +19,5 @@ training:
   action_repeat: 1
 
 agent:
-  uncertainty_constraint: false
+  uncertainty_constraint: true
   uncertainty_epsilon: 0.0

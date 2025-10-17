@@ -1,6 +1,7 @@
 from typing import Callable, Protocol
 
 import jax
+import jax.numpy as jnp
 from brax.training.types import Transition
 
 
@@ -32,6 +33,8 @@ class QTransformation(Protocol):
         alpha: jax.Array | None = None,
         scale: float = 1.0,
         key: jax.Array | None = None,
+        safe: bool = False,
+        uncertainty_constraint: bool = False,
     ):
         ...
 
@@ -49,6 +52,8 @@ class SACBaseEnsemble(QTransformation):
         alpha: jax.Array | None = None,
         scale: float = 1.0,
         key: jax.Array | None = None,
+        safe: bool = False,
+        uncertainty_constraint: bool = False,
     ):
         next_action, next_log_prob = policy(transitions.next_observation)
         next_q = q_fn(
@@ -77,6 +82,9 @@ class SACCostEnsemble(QTransformation):
         alpha: jax.Array | None = None,
         scale: float = 1.0,
         key: jax.Array | None = None,
+        safe: bool = False,
+        uncertainty_constraint: bool = False,
+        n_critics: int = 2,
     ):
         next_action, _ = policy(transitions.next_observation)
         next_q = q_fn(
@@ -84,9 +92,31 @@ class SACCostEnsemble(QTransformation):
             next_action,
             transitions.extras["state_extras"]["idx"],
         )
-        next_v = next_q.mean(axis=-1)
-        cost = transitions.extras["state_extras"]["cost"]
+
+        qc_head_size = int(safe) + int(uncertainty_constraint)
+        B = next_q.shape[0]
+        next_q = next_q.reshape(B, n_critics, qc_head_size)
+        next_v = next_q.mean(axis=1)
+        # next_v = next_v.reshape(next_v.shape[0], -1)
+        discount = transitions.discount.reshape(next_v.shape[0], -1)
+        stage_value = []
+        if safe:
+            cost = transitions.extras["state_extras"]["cost"]
+            stage_value.append(cost)
+        if uncertainty_constraint:
+            disagreement = transitions.extras["state_extras"]["disagreement"]
+            stage_value.append(disagreement)
+        stage_value_vec = jnp.stack(stage_value, axis=-1)
+        """print("\n\n")
+        print("STAGE ", stage_value.shape)
+        print("stage_value.shape:", stage_value.shape)
+        print("scale.shape:", jnp.shape(scale))
+        print("discount.shape:", jnp.shape(transitions.discount))
+        print("gamma.shape:", jnp.shape(gamma))
+        print("next_v.shape:", next_v.shape)
+        print("\n\n")"""
         target_q = jax.lax.stop_gradient(
-            cost * scale + transitions.discount * gamma * next_v
+            stage_value_vec * scale + discount * gamma * next_v
         )
+        # print("TARGET:  ", target_q.shape)
         return target_q

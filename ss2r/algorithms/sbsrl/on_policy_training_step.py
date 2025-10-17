@@ -32,12 +32,14 @@ def make_on_policy_training_step(
     model_update,
     actor_update,
     safe,
+    uncertainty_constraint,
     min_alpha,
     reward_q_transform,
     cost_q_transform,
     model_grad_updates_per_step,
     critic_grad_updates_per_step,
     extra_fields,
+    extra_fields_model,
     get_experience_fn,
     env_steps_per_experience_call,
     tau,
@@ -136,7 +138,7 @@ def make_on_policy_training_step(
         )
         critic_loss = jnp.mean(ensemble_losses)
 
-        if safe:
+        if safe or uncertainty_constraint:
             cost_metrics = {}
             backup_qc_params = training_state.backup_qc_params
             backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
@@ -155,7 +157,8 @@ def make_on_policy_training_step(
                         trans_single,
                         key_i,
                         cost_q_transform,
-                        True,
+                        safe,
+                        uncertainty_constraint,
                         optimizer_state=opt_state,
                         params=params,
                     )
@@ -188,7 +191,7 @@ def make_on_policy_training_step(
         new_behavior_target_qr_params = polyak(
             training_state.behavior_target_qr_params, behavior_qr_params
         )
-        if safe:
+        if safe or uncertainty_constraint:
             new_backup_target_qc_params = polyak(
                 training_state.backup_target_qc_params, backup_qc_params
             )
@@ -333,8 +336,14 @@ def make_on_policy_training_step(
             raise ValueError("Unrolls with more than one step not supported")
         state = planning_env.reset(rollout_keys)  # one-step rollout
         _, transitions = acting.actor_step(
-            planning_env, state, policy, key_generate_unroll, extra_fields=extra_fields
+            planning_env,
+            state,
+            policy,
+            key_generate_unroll,
+            extra_fields=extra_fields_model,
         )
+        shapes = jax.tree_map(lambda x: jnp.asarray(x).shape, transitions)
+        print("Transitions shapes:", shapes)
         sac_replay_buffer_state = sac_replay_buffer.insert(
             sac_replay_buffer_state, float16(transitions)
         )

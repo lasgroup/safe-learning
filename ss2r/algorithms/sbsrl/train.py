@@ -273,6 +273,7 @@ def train(
         action_size=action_size,
         preprocess_observations_fn=normalize_fn,
         safe=safe,
+        uncertainty_constraint=uncertainty_constraint,
         use_bro=use_bro,
         n_critics=n_critics,
         n_heads=n_heads,
@@ -301,6 +302,7 @@ def train(
     }
     if safe:
         extras["state_extras"]["cost"] = jnp.zeros(())  # type: ignore
+    # TODO:
     if safety_filter is not None:
         extras["policy_extras"] = {
             "intervention": jnp.zeros(()),
@@ -353,6 +355,8 @@ def train(
     }
     if safe:
         sac_extras["state_extras"]["cost"] = jnp.zeros((model_ensemble_size,))  # type: ignore
+    if uncertainty_constraint:
+        sac_extras["state_extras"]["disagreement"] = jnp.zeros((model_ensemble_size,))  # type: ignore
     dummy_transition_sac = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
         observation=dummy_obs,
         action=dummy_action,
@@ -391,8 +395,10 @@ def train(
                 normalizer_params=ts_normalizer_params,
                 backup_policy_params=params[1],
                 backup_qr_params=params[3],
-                backup_qc_params=params[4] if safe else None,
-                backup_target_qc_params=params[4] if safe else None,
+                backup_qc_params=params[4] if safe or uncertainty_constraint else None,
+                backup_target_qc_params=params[4]
+                if safe or uncertainty_constraint
+                else None,
             )
         else:
             training_state = training_state.replace(  # type: ignore
@@ -402,10 +408,16 @@ def train(
                 behavior_qr_params=params[3],
                 behavior_target_qr_params=params[3],
                 backup_qr_params=params[3],
-                behavior_qc_params=params[4] if safe else None,
-                behavior_target_qc_params=params[4] if safe else None,
-                backup_qc_params=params[4] if safe else None,
-                backup_target_qc_params=params[4] if safe else None,
+                behavior_qc_params=params[4]
+                if safe or uncertainty_constraint
+                else None,
+                behavior_target_qc_params=params[4]
+                if safe or uncertainty_constraint
+                else None,
+                backup_qc_params=params[4] if safe or uncertainty_constraint else None,
+                backup_target_qc_params=params[4]
+                if safe or uncertainty_constraint
+                else None,
             )
         if load_auxiliaries:
             policy_optimizer_state = restore_state(
@@ -423,7 +435,7 @@ def train(
                 else params[8],
                 training_state.behavior_qr_optimizer_state,
             )
-            if not safe:
+            if not safe and not uncertainty_constraint:
                 qc_optimizer_state = None
             else:
                 qc_optimizer_state = restore_state(
@@ -442,7 +454,7 @@ def train(
             )
     make_planning_policy = sbsrl_networks.make_inference_fn(sbsrl_network)
     make_rollout_policy, get_rollout_policy_params = safety_filters.make(
-        safety_filter if safe else None,
+        safety_filter if safe or uncertainty_constraint else None,
         sbsrl_network,
         training_state,
         advantage_threshold if safety_filter == "advantage" else safety_budget,
@@ -461,6 +473,7 @@ def train(
         safe=safe,
         uncertainty_constraint=uncertainty_constraint,
         uncertainty_epsilon=uncertainty_epsilon,
+        n_critics=n_critics,
         target_entropy=target_entropy,
     )
     alpha_update = (
@@ -473,7 +486,7 @@ def train(
             critic_loss, qr_optimizer, pmap_axis_name=None
         )
     )
-    if safe:
+    if safe or uncertainty_constraint:
         cost_critic_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
             critic_loss, qc_optimizer, pmap_axis_name=None
         )
@@ -492,6 +505,8 @@ def train(
     extra_fields = ("truncation",)
     if safe:
         extra_fields += ("cost",)  # type: ignore
+    if uncertainty_constraint:
+        extra_fields_model = extra_fields + ("disagreement",)
 
     make_model_env = functools.partial(
         create_model_env,
@@ -522,12 +537,14 @@ def train(
         model_update,
         actor_update,
         safe,
+        uncertainty_constraint,
         min_alpha,
         reward_q_transform,
         cost_q_transform,
         model_grad_updates_per_step,
         critic_grad_updates_per_step,
         extra_fields,
+        extra_fields_model,
         get_experience_fn,
         env_steps_per_experience_call,
         tau,

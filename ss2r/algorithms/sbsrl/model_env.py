@@ -63,6 +63,9 @@ class ModelBasedEnv(envs.Env):
                 "cost": transitions.extras["state_extras"].get(
                     "cost", jnp.zeros_like(transitions.reward)
                 ),
+                "disagreement": transitions.extras["state_extras"].get(
+                    "disagreement", jnp.zeros_like(transitions.reward)
+                ),
                 "key": model_key,
             },
         )
@@ -87,6 +90,12 @@ class ModelBasedEnv(envs.Env):
         truncation = jnp.zeros_like(reward, dtype=jnp.float32)
         state.info["cost"] = cost
         state.info["truncation"] = truncation
+        disagreement = (
+            next_obs.std(axis=0).mean(-1)
+            if isinstance(next_obs, jax.Array)
+            else next_obs["state"].std(axis=0).mean(-1)
+        )
+        state.info["disagreement"] = jnp.full(cost.shape, disagreement)
 
         state = state.replace(
             obs=next_obs,

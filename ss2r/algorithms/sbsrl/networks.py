@@ -43,6 +43,7 @@ class NetworkFactory(Protocol[NetworkType]):
         n_critics: int = 2,
         n_heads: int = 1,
         safe: bool = False,
+        uncertainty_constraint: bool = False,
         use_bro: bool = True,
         ensemble_size: int = 10,
         embedding_dim: int = 4,
@@ -205,6 +206,7 @@ def make_sbsrl_networks(
     n_critics: int = 2,
     n_heads: int = 1,
     safe: bool = False,
+    uncertainty_constraint: bool = False,
     ensemble_size: int = 10,
     embedding_dim: int = 4,
 ) -> SBSRLNetworks:
@@ -232,7 +234,8 @@ def make_sbsrl_networks(
         ensemble_size=ensemble_size,
         embedding_dim=embedding_dim,
     )
-    if safe:
+    if safe or uncertainty_constraint:
+        n_outputs_qc = int(safe) + int(uncertainty_constraint)
         qc_network = make_q_network_ensemble(
             observation_size,
             action_size,
@@ -245,6 +248,7 @@ def make_sbsrl_networks(
             n_heads=n_heads,
             ensemble_size=ensemble_size,
             embedding_dim=embedding_dim,
+            head_size=n_outputs_qc,
         )
         old_apply = qc_network.apply
         qc_network.apply = lambda *args, **kwargs: jnn.softplus(

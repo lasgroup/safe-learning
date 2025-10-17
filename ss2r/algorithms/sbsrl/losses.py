@@ -45,6 +45,7 @@ def make_losses(
     safe,
     uncertainty_constraint,
     uncertainty_epsilon,
+    n_critics,
     target_entropy: float | None = None,
 ):
     target_entropy = -0.5 * action_size if target_entropy is None else target_entropy
@@ -83,17 +84,20 @@ def make_losses(
         key: PRNGKey,
         target_q_fn: QTransformation,
         safe: bool = False,
+        uncertainty_constraint: bool = False,
     ) -> jnp.ndarray:
         action = transitions.action
-        scale = cost_scaling if safe else reward_scaling
-        gamma = safety_discounting if safe else discounting
-        q_old_action = qr_network.apply(
+        q_network = qc_network if safe or uncertainty_constraint else qr_network
+        scale = cost_scaling if safe or uncertainty_constraint else reward_scaling
+        gamma = safety_discounting if safe or uncertainty_constraint else discounting
+        q_old_action = q_network.apply(
             normalizer_params,
             q_params,
             transitions.observation,
             action,
             transitions.extras["state_extras"]["idx"],
         )
+        # print("SHAPE:q_old_action ", q_old_action.shape)
         key, another_key = jax.random.split(key)
 
         def policy(obs: jax.Array) -> tuple[jax.Array, jax.Array]:
@@ -109,7 +113,7 @@ def make_losses(
             next_action = parametric_action_distribution.postprocess(next_action)
             return next_action, next_log_prob
 
-        q_fn = lambda obs, action, idx: qr_network.apply(
+        q_fn = lambda obs, action, idx: q_network.apply(
             normalizer_params, target_q_params, obs, action, idx
         )
         target_q = target_q_fn(
@@ -120,11 +124,29 @@ def make_losses(
             alpha,
             scale,
             another_key,
+            safe,
+            uncertainty_constraint,
         )
-        q_error = q_old_action - jnp.expand_dims(target_q, -1)
-        # Better bootstrapping for truncated episodes.
-        truncation = transitions.extras["state_extras"]["truncation"]
-        q_error *= jnp.expand_dims(1 - truncation, -1)
+        q_error = None
+        if safe and uncertainty_constraint:
+            B = q_old_action.shape[0]
+            qc_head_size = int(safe) + int(uncertainty_constraint)
+            q_old_action = q_old_action.reshape(
+                B, n_critics, qc_head_size
+            )  # -> (B, n_critics, head_size)
+            q_error = q_old_action - target_q[:, None, :]
+            # Better bootstrapping for truncated episodes.
+            truncation = transitions.extras["state_extras"]["truncation"]
+            q_error *= 1 - truncation[:, None, None]
+            # print("q_error: ", q_error.shape)
+        else:
+            if target_q.ndim == 1:
+                target_q = jnp.expand_dims(target_q, -1)
+            q_error = q_old_action - target_q
+            # print(q_old_action.shape, target_q.shape, q_error.shape)
+            # Better bootstrapping for truncated episodes.
+            truncation = transitions.extras["state_extras"]["truncation"]
+            q_error *= jnp.expand_dims(1 - truncation, -1)
         q_loss = 0.5 * jnp.mean(jnp.square(q_error))
         return q_loss
 
@@ -180,7 +202,7 @@ def make_losses(
             disagreement = jnp.mean(jnp.std(next_obs_pred, axis=0))
             constraints_list.append(disagreement - uncertainty_epsilon)
             aux["disagreement"] = disagreement
-        if safe:
+        if safe or uncertainty_constraint:
             assert qc_network is not None
             qc_action = jax.vmap(
                 lambda i: qc_network.apply(
@@ -191,23 +213,36 @@ def make_losses(
                     jnp.full((transitions.observation.shape[0],), i, dtype=jnp.int32),
                 )
             )(idxs)  # (E, B, n_critics)
-            mean_qc = jnp.mean(qc_action, axis=(1, 2))
-            safety_constraint = safety_budget - mean_qc
-            constraints_list.append(safety_constraint)
-            aux["constraint_estimate"] = safety_constraint
-            aux["cost"] = mean_qc.mean()
-            aux["qc_std"] = jnp.std(mean_qc)
+            B = qc_action.shape[1]
+            # print(qc_action.shape)
+            qc_action = qc_action.reshape(
+                ensemble_size, B, n_critics, int(safe) + int(uncertainty_constraint)
+            )  # -> (E, B, n_critics, head_size)
+            # print(qc_action.shape)
+            constraints_list = []
+            if safe:
+                q_c = qc_action[:, :, :, 0]
+                mean_qc = jnp.mean(q_c, axis=(1, 2))
+                safety_constraint = safety_budget - mean_qc
+                constraints_list.append(safety_constraint)
+                aux["constraint_estimate"] = safety_constraint
+                aux["cost"] = mean_qc.mean()
+                aux["qc_std"] = jnp.std(mean_qc)
+            if uncertainty_constraint:
+                q_sigma = qc_action[:, :, :, -1]
+                constraints_list.append(q_sigma.mean() - uncertainty_epsilon)
+                # print(q_sigma.shape)
 
-        if penalizer is not None:
-            # penalizer
-            constraints_arr = jnp.concatenate(
-                [jnp.atleast_1d(c) for c in constraints_list], axis=0
-            )
-            actor_loss, penalizer_aux, penalizer_params = penalizer(
-                actor_loss, constraints_arr, jax.lax.stop_gradient(penalizer_params)
-            )
-            aux["penalizer_params"] = penalizer_params
-            aux |= penalizer_aux
+            if penalizer is not None:
+                # penalizer
+                constraints_arr = jnp.concatenate(
+                    [jnp.atleast_1d(c) for c in constraints_list], axis=0
+                )
+                actor_loss, penalizer_aux, penalizer_params = penalizer(
+                    actor_loss, constraints_arr, jax.lax.stop_gradient(penalizer_params)
+                )
+                aux["penalizer_params"] = penalizer_params
+                aux |= penalizer_aux
 
         aux["qr_std"] = jnp.std(jnp.mean(qr, axis=-1))
         actor_loss += exploration_loss

@@ -108,5 +108,4 @@ class SACCostEnsemble(QTransformation):
         target_q = jax.lax.stop_gradient(
             stage_value_vec * scale + discount * gamma * next_v
         )
-        # print("TARGET:  ", target_q.shape)
         return target_q

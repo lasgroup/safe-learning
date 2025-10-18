@@ -342,8 +342,6 @@ def make_on_policy_training_step(
             key_generate_unroll,
             extra_fields=extra_fields_model,
         )
-        shapes = jax.tree_map(lambda x: jnp.asarray(x).shape, transitions)
-        print("Transitions shapes:", shapes)
         sac_replay_buffer_state = sac_replay_buffer.insert(
             sac_replay_buffer_state, float16(transitions)
         )

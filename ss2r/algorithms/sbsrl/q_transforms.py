@@ -94,11 +94,9 @@ class SACCostEnsemble(QTransformation):
         )
 
         qc_head_size = int(safe) + int(uncertainty_constraint)
-        B = next_q.shape[0]
-        next_q = next_q.reshape(B, n_critics, qc_head_size)
+        next_q = next_q.reshape(-1, n_critics, qc_head_size)
         next_v = next_q.mean(axis=1)
-        # next_v = next_v.reshape(next_v.shape[0], -1)
-        discount = transitions.discount.reshape(next_v.shape[0], -1)
+        discount = jnp.expand_dims(transitions.discount, -1)
         stage_value = []
         if safe:
             cost = transitions.extras["state_extras"]["cost"]
@@ -107,14 +105,6 @@ class SACCostEnsemble(QTransformation):
             disagreement = transitions.extras["state_extras"]["disagreement"]
             stage_value.append(disagreement)
         stage_value_vec = jnp.stack(stage_value, axis=-1)
-        """print("\n\n")
-        print("STAGE ", stage_value.shape)
-        print("stage_value.shape:", stage_value.shape)
-        print("scale.shape:", jnp.shape(scale))
-        print("discount.shape:", jnp.shape(transitions.discount))
-        print("gamma.shape:", jnp.shape(gamma))
-        print("next_v.shape:", next_v.shape)
-        print("\n\n")"""
         target_q = jax.lax.stop_gradient(
             stage_value_vec * scale + discount * gamma * next_v
         )

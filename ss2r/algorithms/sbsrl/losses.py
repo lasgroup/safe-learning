@@ -97,7 +97,6 @@ def make_losses(
             action,
             transitions.extras["state_extras"]["idx"],
         )
-        # print("SHAPE:q_old_action ", q_old_action.shape)
         key, another_key = jax.random.split(key)
 
         def policy(obs: jax.Array) -> tuple[jax.Array, jax.Array]:
@@ -129,21 +128,18 @@ def make_losses(
         )
         q_error = None
         if safe and uncertainty_constraint:
-            B = q_old_action.shape[0]
             qc_head_size = int(safe) + int(uncertainty_constraint)
             q_old_action = q_old_action.reshape(
-                B, n_critics, qc_head_size
+                -1, n_critics, qc_head_size
             )  # -> (B, n_critics, head_size)
             q_error = q_old_action - target_q[:, None, :]
             # Better bootstrapping for truncated episodes.
             truncation = transitions.extras["state_extras"]["truncation"]
             q_error *= 1 - truncation[:, None, None]
-            # print("q_error: ", q_error.shape)
         else:
             if target_q.ndim == 1:
                 target_q = jnp.expand_dims(target_q, -1)
             q_error = q_old_action - target_q
-            # print(q_old_action.shape, target_q.shape, q_error.shape)
             # Better bootstrapping for truncated episodes.
             truncation = transitions.extras["state_extras"]["truncation"]
             q_error *= jnp.expand_dims(1 - truncation, -1)
@@ -190,8 +186,7 @@ def make_losses(
         actor_loss = -qr.mean()
         exploration_loss = (alpha * log_prob).mean()
 
-        aux = {}
-        constraints_list = []
+        aux = {}  # now just for logging purpose
         if uncertainty_constraint:
             model_apply = jax.vmap(
                 sbsrl_network.model_network.apply, (None, 0, None, None)
@@ -200,7 +195,6 @@ def make_losses(
                 normalizer_params, model_params, transitions.observation, action
             )
             disagreement = jnp.mean(jnp.std(next_obs_pred, axis=0))
-            constraints_list.append(disagreement - uncertainty_epsilon)
             aux["disagreement"] = disagreement
         if safe or uncertainty_constraint:
             assert qc_network is not None
@@ -212,18 +206,17 @@ def make_losses(
                     action,
                     jnp.full((transitions.observation.shape[0],), i, dtype=jnp.int32),
                 )
-            )(idxs)  # (E, B, n_critics)
-            B = qc_action.shape[1]
-            # print(qc_action.shape)
+            )(idxs)  # (E, B, n_critics*head_size)
             qc_action = qc_action.reshape(
-                ensemble_size, B, n_critics, int(safe) + int(uncertainty_constraint)
+                ensemble_size, -1, n_critics, int(safe) + int(uncertainty_constraint)
             )  # -> (E, B, n_critics, head_size)
-            # print(qc_action.shape)
             constraints_list = []
             if safe:
                 q_c = qc_action[:, :, :, 0]
                 mean_qc = jnp.mean(q_c, axis=(1, 2))
-                safety_constraint = safety_budget - mean_qc
+                safety_constraint = (
+                    safety_budget - mean_qc
+                )  # one constraint for each idx
                 constraints_list.append(safety_constraint)
                 aux["constraint_estimate"] = safety_constraint
                 aux["cost"] = mean_qc.mean()
@@ -231,8 +224,7 @@ def make_losses(
             if uncertainty_constraint:
                 q_sigma = qc_action[:, :, :, -1]
                 constraints_list.append(q_sigma.mean() - uncertainty_epsilon)
-                # print(q_sigma.shape)
-
+                aux["q_sigma"] = q_sigma.mean()
             if penalizer is not None:
                 # penalizer
                 constraints_arr = jnp.concatenate(

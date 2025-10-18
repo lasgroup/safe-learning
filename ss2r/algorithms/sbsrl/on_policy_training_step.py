@@ -48,6 +48,7 @@ def make_on_policy_training_step(
     num_model_rollouts,
     penalizer,
     safety_budget,
+    model_to_real_data_ratio,
     offline,
     ensemble_size,
     sac_batch_size,
@@ -348,6 +349,48 @@ def make_on_policy_training_step(
 
         return sac_replay_buffer_state
 
+    def relabel_real_transitions(
+        planning_env: ModelBasedEnv,
+        transitions: Transition,
+    ):
+        pred_fn = planning_env.model_network.apply
+        model_params = planning_env.model_params
+        normalizer_params = planning_env.normalizer_params
+        vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
+        next_obs_pred, reward, cost = vmap_pred_fn(
+            normalizer_params, model_params, transitions.observation, transitions.action
+        )
+        disagreement = (
+            next_obs_pred.std(axis=0).mean(-1)
+            if isinstance(next_obs_pred, jax.Array)
+            else next_obs_pred["state"].std(axis=0).mean(-1)
+        )  # (B,)
+        new_reward = jnp.tile(transitions.reward[:, None], (1, ensemble_size))
+        new_discount = jnp.tile(transitions.discount[:, None], (1, ensemble_size))
+        new_next_observation = jnp.tile(
+            transitions.next_observation[:, None, :], (1, ensemble_size, 1)
+        )
+        transitions.extras["state_extras"]["truncation"] = jnp.tile(
+            transitions.extras["state_extras"]["truncation"][:, None],
+            (1, ensemble_size),
+        )
+        transitions.extras["state_extras"]["disagreement"] = jnp.tile(
+            disagreement[:, None], (1, ensemble_size)
+        )
+        if safe:
+            transitions.extras["state_extras"]["cost"] = jnp.tile(
+                transitions.extras["state_extras"]["cost"][:, None], (1, ensemble_size)
+            )
+
+        return Transition(
+            observation=transitions.observation,
+            next_observation=new_next_observation,
+            action=transitions.action,
+            reward=new_reward,
+            discount=new_discount,
+            extras=transitions.extras,
+        )
+
     def training_step(
         training_state: TrainingState,
         env_state: envs.State,
@@ -396,7 +439,25 @@ def make_on_policy_training_step(
         )
         # Train SAC with model data
         sac_buffer_state, model_transitions = sac_replay_buffer.sample(sac_buffer_state)
-        transitions = model_transitions
+
+        # Add some real transitions
+        num_real_transitions = int(
+            model_transitions.reward.shape[0] * (1 - model_to_real_data_ratio)
+        )
+        assert (
+            num_real_transitions <= transitions.reward.shape[0]
+        ), "More model minibatches than real minibatches"
+        if num_real_transitions >= 1:
+            transitions = relabel_real_transitions(planning_env, transitions)
+            transitions = float16(transitions)
+            transitions = jax.tree_util.tree_map(
+                lambda x, y: x.at[:num_real_transitions].set(y[:num_real_transitions]),
+                model_transitions,
+                transitions,
+            )
+        else:
+            transitions = model_transitions
+
         transitions = jax.tree_util.tree_map(
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),
             transitions,

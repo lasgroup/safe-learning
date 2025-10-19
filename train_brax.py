@@ -137,15 +137,22 @@ def main(cfg):
             else:
                 policy_params = params
             if cfg.agent.name == "mbpo" and cfg.agent.safety_filter is not None:
+                budget = (
+                    (
+                        cfg.training.safety_budget
+                        / (1 - cfg.agent.safety_discounting)
+                        / cfg.training.episode_length
+                        * cfg.training.action_repeat
+                    )
+                    if cfg.agent.safety_discounting != 1.0
+                    else cfg.training.safety_budget
+                )
                 policy_params = (
                     params[0],
                     (
                         params[1],
                         params[3],
-                        cfg.training.safety_budget
-                        / (1 - cfg.agent.discounting)
-                        / cfg.training.episode_length
-                        * cfg.training.action_repeat,
+                        budget,
                     ),
                 )
             video = benchmark_suites.render_fns[cfg.environment.task_name](

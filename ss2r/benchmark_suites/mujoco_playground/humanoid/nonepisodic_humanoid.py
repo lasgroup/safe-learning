@@ -102,7 +102,8 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
             return data
 
         data = jax.lax.cond(
-            start_on_ground,
+            # FIXME (yarden): start on ground
+            False,
             ground_init,
             normal_init,
         )

@@ -186,7 +186,7 @@ def make_non_episodic_training_step(
             make_rollout_policy,
             get_rollout_policy_params(training_state),
             training_state.normalizer_params,
-            model_replay_buffer,
+            sac_replay_buffer,
             env_state,
             buffer_state,
             experience_key,
@@ -241,7 +241,7 @@ def make_non_episodic_training_step(
             length=num_actor_updates,
         )
         metrics = {**critic_metrics, **actor_metrics}
-        metrics["buffer_current_size"] = sac_replay_buffer.size(model_buffer_state)
+        metrics["buffer_current_size"] = sac_replay_buffer.size(sac_buffer_state)
         metrics |= env_state.metrics
         return (
             training_state,

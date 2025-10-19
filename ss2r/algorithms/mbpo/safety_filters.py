@@ -27,7 +27,6 @@ def make_nonepisodic_filter_fn(
     mbpo_networks: MBPONetworks,
     inital_backup_policy_params,
     initial_normalizer_params,
-    scaling_fn,
 ) -> Callable[[Any, bool], types.Policy]:
     """Creates params and inference function for the SAC agent."""
     backup_policy = sac_networks.make_inference_fn(mbpo_networks)(
@@ -62,7 +61,7 @@ def make_nonepisodic_filter_fn(
                 ).mean(axis=-1)
             else:
                 raise ValueError("QC network is not defined, cannot do shielding.")
-            expected_total_cost = scaling_fn(qc)
+            expected_total_cost = qc
             backup_action = backup_policy(observations, key_sample)[0]
             safe = expected_total_cost[..., None] < safety_budget
             safe_action = jnp.where(
@@ -77,6 +76,7 @@ def make_nonepisodic_filter_fn(
                     expected_total_cost - safety_budget,
                     jnp.zeros_like(expected_total_cost),
                 ),
+                "cumulative_cost": qc,
                 "expected_total_cost": expected_total_cost,
                 "q_c": qc,
             }
@@ -332,7 +332,6 @@ def make(
             mbpo_network,
             training_state.backup_policy_params,
             training_state.normalizer_params,
-            budget_scaling_fn,
         ), get_inference_policy_params(True, safety_budget)
     else:
         raise ValueError(f"Unknown safety filter {name}")

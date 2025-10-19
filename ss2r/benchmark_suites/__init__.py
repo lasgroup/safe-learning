@@ -525,9 +525,9 @@ randomization_fns = {
     "CartpoleBalanceSparse": dm_cartpole.domain_randomization,
     "CartpoleBalance": dm_cartpole.domain_randomization,
     "HumanoidWalk": dm_humanoid.domain_randomization,
-    "NonEpisodicHumanoidStand": mujoco_playground.render,
-    "NonEpisodicHumanoidWalk": mujoco_playground.render,
-    "NonEpisodicHumanoidRun": mujoco_playground.render,
+    "NonEpisodicHumanoidStand": dm_humanoid.domain_randomization,
+    "NonEpisodicHumanoidWalk": dm_humanoid.domain_randomization,
+    "NonEpisodicHumanoidRun": dm_humanoid.domain_randomization,
     "SafeHumanoidWalk": dm_humanoid.domain_randomization,
     "AlohaPegInsertionDistill": manipulation.get_domain_randomizer(
         "AlohaPegInsertionDistill"

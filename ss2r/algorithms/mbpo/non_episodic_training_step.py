@@ -218,7 +218,7 @@ def make_non_episodic_training_step(
         sac_buffer_state, sac_transitions = sac_replay_buffer.sample(sac_buffer_state)
         # FIXME (yarden): this is not the original plan.
         # As long as there are no interventions, agent should continue.
-        discount = 1.0 - sac_transitions.extras["state_extras"]["intervention"]
+        discount = 1.0 - sac_transitions.extras["policy_extras"]["intervention"]
         sac_transitions = sac_transitions._replace(discount=discount)
         critic_transitions = jax.tree_util.tree_map(
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),

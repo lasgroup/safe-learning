@@ -1,7 +1,8 @@
 # @package _global_
 defaults:
-  - mujoco_playground_dm_control
+  - mujoco_playground_dm_control_mbpo
   - nonepisodic
+  - override /agent: mbpo
   - override /environment: nonepisodic_humanoid
   - _self_
 
@@ -12,7 +13,12 @@ training:
   num_timesteps: 5000000
   train_domain_randomization: false
   eval_domain_randomization: false
-  safe: false
+  safe: true
+  wandb_id: jkdr831o
+  safety_budget: 25.
 
 agent:
   activation: swish
+  training_step_fn: nonepisodic
+  safety_discounting: 1.
+  safety_filter: nonepisodic

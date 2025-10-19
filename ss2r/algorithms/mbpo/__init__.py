@@ -14,7 +14,7 @@ from ss2r.algorithms.sac.q_transforms import (
 def get_training_step_fn(cfg):
     if cfg.agent.training_step_fn == "on_policy":
         return on_policy_training_step.make_on_policy_training_step
-    if cfg.agent.training_step_fn == "non_episodic":
+    if cfg.agent.training_step_fn == "nonepisodic":
         return non_episodic_training_step.make_non_episodic_training_step
     else:
         raise ValueError(f"Unknown training_step_fn: {cfg.agent.training_step_fn}")

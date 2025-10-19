@@ -1,3 +1,4 @@
 name: multi_lagrangian
 learning_rate: 7e-7
-initial_multiplier: 0.01
+initial_multiplier_uncertainty: 50
+initial_multiplier_cost: 0.01

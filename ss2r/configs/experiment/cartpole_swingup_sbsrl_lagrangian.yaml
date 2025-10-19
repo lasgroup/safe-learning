@@ -27,3 +27,6 @@ agent:
   model_grad_updates_per_step: 50
   num_model_rollouts: 200
   embedding_dim: 32
+  penalizer:
+    initial_multiplier_cost: 0.01
+    learning_rate: 7e-7

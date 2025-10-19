@@ -505,8 +505,9 @@ def train(
     extra_fields = ("truncation",)
     if safe:
         extra_fields += ("cost",)  # type: ignore
+    extra_fields_model = extra_fields
     if uncertainty_constraint:
-        extra_fields_model = extra_fields + ("disagreement",)
+        extra_fields_model += ("disagreement",)  # type: ignore
 
     make_model_env = functools.partial(
         create_model_env,

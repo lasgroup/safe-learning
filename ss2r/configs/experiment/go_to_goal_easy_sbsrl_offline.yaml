@@ -1,0 +1,37 @@
+# @package _global_
+defaults:
+  - override /environment: go_to_goal_easy
+  - override /agent: sbsrl
+  - override /agent/penalizer: multi_lagrangian
+  - _self_
+
+training:
+  num_timesteps: 2500000
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  safe: true
+  safety_budget: 25
+  action_repeat: 4
+  num_envs: 20
+  num_evals: 15
+  wandb_id: 
+
+agent:
+  policy_hidden_layer_sizes: [256, 256, 256]
+  value_hidden_layer_sizes: [512, 512]
+  activation: swish
+  batch_size: 256
+  max_replay_size: 4194304
+  critic_grad_updates_per_step: 10
+  model_grad_updates_per_step: 50
+  num_model_rollouts: 50000
+  offline: true
+  discounting: 0.95
+  #reward_scaling: 100. #TODO: should I use this?
+  uncertainty_constraint: true
+  uncertainty_epsilon: 0.0
+  model_to_real_data_ratio: 0.5
+  penalizer:
+    initial_multiplier_uncertainty: 10
+    initial_multiplier_cost: 10
+    learning_rate: 1e-2

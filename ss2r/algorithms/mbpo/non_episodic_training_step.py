@@ -216,24 +216,28 @@ def make_non_episodic_training_step(
         ) = run_experience_step(training_state, env_state, sac_buffer_state, key)
         # Train SAC
         sac_buffer_state, sac_transitions = sac_replay_buffer.sample(sac_buffer_state)
-        transitions = jax.tree_util.tree_map(
+        # FIXME (yarden): this is not the original plan.
+        # As long as there are no interventions, agent should continue.
+        discount = 1.0 - sac_transitions.extras["state_extras"]["intervention"]
+        sac_transitions = sac_transitions._replace(discount=discount)
+        critic_transitions = jax.tree_util.tree_map(
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),
             sac_transitions,
         )
         (training_state, _), critic_metrics = jax.lax.scan(
-            critic_sgd_step, (training_state, training_key), transitions
+            critic_sgd_step, (training_state, training_key), critic_transitions
         )
         num_actor_updates = -(
             -critic_grad_updates_per_step // num_critic_updates_per_actor_update
         )
         assert num_actor_updates > 0, "Actor updates is non-positive"
-        transitions = jax.tree_util.tree_map(
-            lambda x: x[:num_actor_updates], transitions
+        actor_transitions = jax.tree_util.tree_map(
+            lambda x: x[:num_actor_updates], sac_transitions
         )
         (training_state, _), actor_metrics = jax.lax.scan(
             actor_sgd_step,
             (training_state, training_key),
-            transitions,
+            actor_transitions,
             length=num_actor_updates,
         )
         metrics = {**critic_metrics, **actor_metrics}

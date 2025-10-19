@@ -2,9 +2,11 @@
 defaults:
   - mujoco_playground_dm_control
   - nonepisodic
-  - override /environment: humanoid_walk
+  - override /environment: nonepisodic_humanoid
   - _self_
 
+environment:
+  task_name: NonEpisodicHumanoidWalk
 
 training:
   num_timesteps: 5000000

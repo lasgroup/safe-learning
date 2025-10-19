@@ -24,8 +24,10 @@ from ss2r.benchmark_suites.mujoco_playground.go2_joystick import (
     handstand,
     joystick,
 )
-from ss2r.benchmark_suites.mujoco_playground.humanoid import getup as humanoid_getup
 from ss2r.benchmark_suites.mujoco_playground.humanoid import humanoid as dm_humanoid
+from ss2r.benchmark_suites.mujoco_playground.humanoid import (
+    nonepisodic as nonepisodic_humanoid,
+)
 from ss2r.benchmark_suites.mujoco_playground.pick_cartesian import pick_cartesian
 from ss2r.benchmark_suites.mujoco_playground.quadruped import quadruped
 from ss2r.benchmark_suites.mujoco_playground.walker import walker
@@ -63,21 +65,23 @@ manipulation.register_environment(
     pick_cartesian.default_config(),
 )
 dm_control_suite.register_environment(
-    "HumanoidGetup",
-    functools.partial(humanoid_getup.HumanoidGetup, move_speed=0.0),
+    "NonEpisodicHumanoidStand",
+    functools.partial(nonepisodic_humanoid.NonEpisodicHumanoid, move_speed=0.0),
     dm_control_suite.humanoid.default_config,
 )
 dm_control_suite.register_environment(
-    "HumanoidGetupWalk",
+    "NonEpisodicHumanoidWalk",
     functools.partial(
-        humanoid_getup.HumanoidGetup, move_speed=humanoid_getup.humanoid.WALK_SPEED
+        nonepisodic_humanoid.NonEpisodicHumanoid,
+        move_speed=nonepisodic_humanoid.humanoid.WALK_SPEED,
     ),
     dm_control_suite.humanoid.default_config,
 )
 dm_control_suite.register_environment(
-    "HumanoidGetupRun",
+    "NonEpisodicHumanoidRun",
     functools.partial(
-        humanoid_getup.HumanoidGetup, move_speed=humanoid_getup.humanoid.RUN_SPEED
+        nonepisodic_humanoid.NonEpisodicHumanoid,
+        move_speed=nonepisodic_humanoid.humanoid.RUN_SPEED,
     ),
     dm_control_suite.humanoid.default_config,
 )
@@ -521,7 +525,9 @@ randomization_fns = {
     "CartpoleBalanceSparse": dm_cartpole.domain_randomization,
     "CartpoleBalance": dm_cartpole.domain_randomization,
     "HumanoidWalk": dm_humanoid.domain_randomization,
-    "HumanoidGetup": dm_humanoid.domain_randomization,
+    "NonEpisodicHumanoidStand": mujoco_playground.render,
+    "NonEpisodicHumanoidWalk": mujoco_playground.render,
+    "NonEpisodicHumanoidRun": mujoco_playground.render,
     "SafeHumanoidWalk": dm_humanoid.domain_randomization,
     "AlohaPegInsertionDistill": manipulation.get_domain_randomizer(
         "AlohaPegInsertionDistill"
@@ -580,7 +586,9 @@ render_fns = {
     "SafeWalkerWalk": functools.partial(mujoco_playground.render, camera="side"),
     "SafeWalkerRun": functools.partial(mujoco_playground.render, camera="side"),
     "HumanoidWalk": mujoco_playground.render,
-    "HumanoidGetup": mujoco_playground.render,
+    "NonEpisodicHumanoidStand": mujoco_playground.render,
+    "NonEpisodicHumanoidWalk": mujoco_playground.render,
+    "NonEpisodicHumanoidRun": mujoco_playground.render,
     "SafeHumanoidWalk": mujoco_playground.render,
     "AlohaSinglePegInsertion": mujoco_playground.render,
     "AlohaPegInsertionDistill": mujoco_playground.render,

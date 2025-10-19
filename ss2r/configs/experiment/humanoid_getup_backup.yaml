@@ -2,7 +2,7 @@
 defaults:
   - mujoco_playground_dm_control_mbpo
   - override /agent: mbpo
-  - override /environment: humanoid_getup
+  - override /environment: nonepisodic_humanoid
   - _self_
 
 training:

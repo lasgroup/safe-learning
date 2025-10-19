@@ -169,7 +169,7 @@ class NonEpisodicWrapper(Wrapper):
             f, state, (), self.action_repeat
         )
         sum_rewards = jp.sum(rewards, axis=0)
-        state = state.replace(reward=sum_rewards)
+        state = state.replace(reward=sum_rewards, done=jp.zeros_like(state.done))
         if maybe_costs is not None:
             state.info["cost"] = jp.sum(maybe_costs, axis=0)
         if maybe_eval_rewards is not None:

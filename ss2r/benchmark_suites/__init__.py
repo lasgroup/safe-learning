@@ -26,7 +26,7 @@ from ss2r.benchmark_suites.mujoco_playground.go2_joystick import (
 )
 from ss2r.benchmark_suites.mujoco_playground.humanoid import humanoid as dm_humanoid
 from ss2r.benchmark_suites.mujoco_playground.humanoid import (
-    nonepisodic as nonepisodic_humanoid,
+    nonepisodic_humanoid as nonepisodic_humanoid,
 )
 from ss2r.benchmark_suites.mujoco_playground.pick_cartesian import pick_cartesian
 from ss2r.benchmark_suites.mujoco_playground.quadruped import quadruped

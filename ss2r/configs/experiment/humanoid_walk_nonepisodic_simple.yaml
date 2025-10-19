@@ -1,0 +1,18 @@
+# @package _global_
+defaults:
+  - mujoco_playground_dm_control
+  - nonepisodic
+  - override /environment: nonepisodic_humanoid
+  - _self_
+
+environment:
+  task_name: NonEpisodicHumanoidWalk
+
+training:
+  num_timesteps: 5000000
+  train_domain_randomization: false
+  eval_domain_randomization: false
+  safe: false
+
+agent:
+  activation: swish

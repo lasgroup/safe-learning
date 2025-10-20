@@ -14,6 +14,17 @@ def normalize_angle(angle, lower_bound=-jp.pi, upper_bound=jp.pi):
     return (angle - lower_bound) % range_width + lower_bound
 
 
+def default_config() -> config_dict.ConfigDict:
+    return config_dict.create(
+        ctrl_dt=0.025,
+        sim_dt=0.005,  # 0.0025 in DM Control
+        episode_length=1000,
+        action_repeat=1,
+        vision=False,
+        ground_start_probability=1.0,
+    )
+
+
 class NonEpisodicHumanoid(humanoid.Humanoid):
     """Humanoid getup task adapted from Go1 getup."""
 
@@ -26,6 +37,7 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
         super().__init__(
             move_speed=move_speed, config=config, config_overrides=config_overrides
         )
+        self.ground_start_probability = config.ground_start_probability
 
     def _post_init(self):
         super()._post_init()
@@ -82,7 +94,7 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
 
     def reset(self, rng: jax.Array) -> mjx_env.State:
         key, key1, key2 = jax.random.split(rng, 3)
-        start_on_ground = jax.random.bernoulli(key1, 0.9)
+        start_on_ground = jax.random.bernoulli(key1, self.ground_start_probability)
 
         def ground_init():
             qpos = self._get_random_qpos(key2)

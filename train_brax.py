@@ -130,31 +130,10 @@ def main(cfg):
             rng = jax.random.split(
                 jax.random.PRNGKey(cfg.training.seed), cfg.training.num_eval_envs
             )
-            # TODO (yarden): write a function that handles this
-            # more cleanly.
             if len(params) != 2:
                 policy_params = params[:2]
             else:
                 policy_params = params
-            if cfg.agent.name == "mbpo" and cfg.agent.safety_filter is not None:
-                budget = (
-                    (
-                        cfg.training.safety_budget
-                        / (1 - cfg.agent.safety_discounting)
-                        / cfg.training.episode_length
-                        * cfg.training.action_repeat
-                    )
-                    if cfg.agent.safety_discounting != 1.0
-                    else cfg.training.safety_budget
-                )
-                policy_params = (
-                    params[0],
-                    (
-                        params[1],
-                        params[4],
-                        budget,
-                    ),
-                )
             video = benchmark_suites.render_fns[cfg.environment.task_name](
                 eval_env,
                 make_policy(policy_params, deterministic=True),

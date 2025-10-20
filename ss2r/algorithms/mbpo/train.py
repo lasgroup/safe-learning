@@ -793,4 +793,15 @@ def train(
     if store_buffer:
         params += (model_buffer_state,)
     logging.info("total steps: %s", total_steps)
-    return make_rollout_policy, params, metrics
+    if safety_filter is not None:
+
+        def make_policy(params, deterministic):
+            policy_params = (
+                params[0],
+                (params[1], training_state.backup_qc_params, safety_budget),
+            )
+            return make_rollout_policy(policy_params, deterministic)
+    else:
+        make_policy = make_rollout_policy
+
+    return make_policy, params, metrics

@@ -22,3 +22,4 @@ agent:
   training_step_fn: nonepisodic
   safety_discounting: 1.
   safety_filter: nonepisodic
+  load_auxiliaries: true

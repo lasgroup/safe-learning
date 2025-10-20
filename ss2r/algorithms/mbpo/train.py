@@ -335,10 +335,14 @@ def train(
         dummy_data_sample=dummy_transition,
         sample_batch_size=batch_size * model_grad_updates_per_step,
     )
+    if make_training_step_fn == make_non_episodic_training_step:
+        sample_batch_size = sac_batch_size
+    else:
+        sample_batch_size = sac_batch_size * critic_grad_updates_per_step
     sac_replay_buffer = replay_buffers.UniformSamplingQueue(
         max_replay_size=max_replay_size,
         dummy_data_sample=dummy_transition,
-        sample_batch_size=sac_batch_size * critic_grad_updates_per_step,
+        sample_batch_size=sample_batch_size,
     )
     model_buffer_state = model_replay_buffer.init(model_rb_key)
     sac_buffer_state = sac_replay_buffer.init(actor_critic_rb_key)
@@ -593,23 +597,11 @@ def train(
             return (ts, es, mbs, acbs, new_key), metrics
 
         (
-            (
-                training_state,
-                env_state,
-                model_buffer_state,
-                sac_buffer_state,
-                key,
-            ),
+            (training_state, env_state, model_buffer_state, sac_buffer_state, key),
             metrics,
         ) = jax.lax.scan(
             f,
-            (
-                training_state,
-                env_state,
-                model_buffer_state,
-                sac_buffer_state,
-                key,
-            ),
+            (training_state, env_state, model_buffer_state, sac_buffer_state, key),
             (),
             length=num_training_steps_per_epoch,
         )
@@ -641,11 +633,7 @@ def train(
             sac_buffer_state,
             metrics,
         ) = training_epoch(
-            training_state,
-            env_state,
-            model_buffer_state,
-            sac_buffer_state,
-            key,
+            training_state, env_state, model_buffer_state, sac_buffer_state, key
         )
         metrics = jax.tree_util.tree_map(jnp.mean, metrics)
         jax.tree_util.tree_map(lambda x: x.block_until_ready(), metrics)
@@ -734,11 +722,7 @@ def train(
             sac_buffer_state,
             training_metrics,
         ) = training_epoch_with_timing(
-            training_state,
-            env_state,
-            model_buffer_state,
-            sac_buffer_state,
-            epoch_key,
+            training_state, env_state, model_buffer_state, sac_buffer_state, epoch_key
         )
         if reset_on_eval:
             reset_keys = jax.random.split(epoch_key, num_envs)

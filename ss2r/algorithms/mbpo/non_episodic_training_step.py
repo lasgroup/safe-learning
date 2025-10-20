@@ -6,12 +6,7 @@ from brax import envs
 from brax.training.types import PRNGKey
 
 from ss2r.algorithms.mbpo.types import TrainingState, TrainingStepFn
-from ss2r.algorithms.sac.types import (
-    Metrics,
-    ReplayBufferState,
-    Transition,
-    float32,
-)
+from ss2r.algorithms.sac.types import Metrics, ReplayBufferState, float32
 
 
 def make_non_episodic_training_step(
@@ -39,12 +34,21 @@ def make_non_episodic_training_step(
     safety_budget,
     qc_netwrok,
 ) -> TrainingStepFn:
-    def critic_sgd_step(
-        carry: Tuple[TrainingState, PRNGKey], transitions: Transition
-    ) -> Tuple[Tuple[TrainingState, PRNGKey], Metrics]:
-        training_state, key = carry
-        key, key_critic = jax.random.split(key)
+    def sgd_step(
+        carry: Tuple[TrainingState, ReplayBufferState, PRNGKey, int], unused_t
+    ) -> Tuple[Tuple[TrainingState, ReplayBufferState, PRNGKey, int], Metrics]:
+        training_state, sac_buffer_state, key, count = carry
+        key, key_alpha, key_critic, key_actor = jax.random.split(key, 4)
+        new_buffer_state, transitions = sac_replay_buffer.sample(sac_buffer_state)
         transitions = float32(transitions)
+        alpha_loss, alpha_params, alpha_optimizer_state = alpha_update(
+            training_state.alpha_params,
+            training_state.behavior_policy_params,
+            training_state.normalizer_params,
+            transitions,
+            key_alpha,
+            optimizer_state=training_state.alpha_optimizer_state,
+        )
         alpha = jnp.exp(training_state.alpha_params) + min_alpha
         critic_loss, behavior_qr_params, behavior_qr_optimizer_state = critic_update(
             training_state.behavior_qr_params,
@@ -98,6 +102,30 @@ def make_non_episodic_training_step(
             cost_metrics = {}
             backup_qc_params = training_state.backup_qc_params
             backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
+        (actor_loss, _), new_policy_params, new_policy_optimizer_state = actor_update(
+            training_state.behavior_policy_params,
+            training_state.normalizer_params,
+            training_state.behavior_qr_params,
+            training_state.behavior_qc_params,
+            alpha,
+            transitions,
+            key_actor,
+            safety_budget,
+            None,
+            None,
+            optimizer_state=training_state.behavior_policy_optimizer_state,
+            params=training_state.behavior_policy_params,
+        )
+        should_update_actor = count % num_critic_updates_per_actor_update == 0
+        update_if_needed = lambda x, y: jnp.where(should_update_actor, x, y)
+        policy_params = jax.tree_map(
+            update_if_needed, new_policy_params, training_state.behavior_policy_params
+        )
+        policy_optimizer_state = jax.tree_map(
+            update_if_needed,
+            new_policy_optimizer_state,
+            training_state.behavior_policy_optimizer_state,
+        )
         polyak = lambda target, new: jax.tree_util.tree_map(
             lambda x, y: x * (1 - tau) + y * tau, target, new
         )
@@ -111,6 +139,9 @@ def make_non_episodic_training_step(
         else:
             new_backup_target_qc_params = training_state.backup_target_qc_params
         metrics = {
+            "actor_loss": actor_loss,
+            "alpha_loss": alpha_loss,
+            "alpha": jnp.exp(alpha_params),
             "critic_loss": critic_loss,
             "fraction_done": 1.0 - transitions.discount.mean(),
             **cost_metrics,
@@ -128,50 +159,12 @@ def make_non_episodic_training_step(
             behavior_qc_params=backup_qc_params,
             backup_target_qc_params=new_backup_target_qc_params,
             gradient_steps=training_state.gradient_steps + 1,
-        )
-        return (new_training_state, key), metrics
-
-    def actor_sgd_step(
-        carry: Tuple[TrainingState, PRNGKey], transitions: Transition
-    ) -> Tuple[Tuple[TrainingState, PRNGKey], Metrics]:
-        training_state, key = carry
-        key, key_alpha, key_actor = jax.random.split(key, 3)
-        transitions = float32(transitions)
-        alpha_loss, alpha_params, alpha_optimizer_state = alpha_update(
-            training_state.alpha_params,
-            training_state.behavior_policy_params,
-            training_state.normalizer_params,
-            transitions,
-            key_alpha,
-            optimizer_state=training_state.alpha_optimizer_state,
-        )
-        alpha = jnp.exp(training_state.alpha_params) + min_alpha
-        (actor_loss, _), policy_params, policy_optimizer_state = actor_update(
-            training_state.behavior_policy_params,
-            training_state.normalizer_params,
-            training_state.behavior_qr_params,
-            training_state.behavior_qc_params,
-            alpha,
-            transitions,
-            key_actor,
-            safety_budget,
-            None,
-            None,
-            optimizer_state=training_state.behavior_policy_optimizer_state,
-            params=training_state.behavior_policy_params,
-        )
-        metrics = {
-            "actor_loss": actor_loss,
-            "alpha_loss": alpha_loss,
-            "alpha": jnp.exp(alpha_params),
-        }
-        new_training_state = training_state.replace(  # type: ignore
             behavior_policy_optimizer_state=policy_optimizer_state,
             behavior_policy_params=policy_params,
             alpha_optimizer_state=alpha_optimizer_state,
             alpha_params=alpha_params,
         )
-        return (new_training_state, key), metrics
+        return (new_training_state, new_buffer_state, key, count + 1), metrics
 
     def run_experience_step(
         training_state: TrainingState,
@@ -215,28 +208,12 @@ def make_non_episodic_training_step(
             training_key,
         ) = run_experience_step(training_state, env_state, sac_buffer_state, key)
         # Train SAC
-        sac_buffer_state, sac_transitions = sac_replay_buffer.sample(sac_buffer_state)
-        critic_transitions = jax.tree_util.tree_map(
-            lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),
-            sac_transitions,
+        (training_state, sac_buffer_state, *_), metrics = jax.lax.scan(
+            sgd_step,
+            (training_state, sac_buffer_state, training_key, 0),
+            (),
+            length=critic_grad_updates_per_step,
         )
-        (training_state, _), critic_metrics = jax.lax.scan(
-            critic_sgd_step, (training_state, training_key), critic_transitions
-        )
-        num_actor_updates = -(
-            -critic_grad_updates_per_step // num_critic_updates_per_actor_update
-        )
-        assert num_actor_updates > 0, "Actor updates is non-positive"
-        actor_transitions = jax.tree_util.tree_map(
-            lambda x: x[:num_actor_updates], sac_transitions
-        )
-        (training_state, _), actor_metrics = jax.lax.scan(
-            actor_sgd_step,
-            (training_state, training_key),
-            actor_transitions,
-            length=num_actor_updates,
-        )
-        metrics = {**critic_metrics, **actor_metrics}
         metrics["buffer_current_size"] = sac_replay_buffer.size(sac_buffer_state)
         metrics |= env_state.metrics
         return (

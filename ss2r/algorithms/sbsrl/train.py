@@ -473,6 +473,7 @@ def train(
         uncertainty_constraint=uncertainty_constraint,
         uncertainty_epsilon=uncertainty_epsilon,
         n_critics=n_critics,
+        offline=offline,
         target_entropy=target_entropy,
     )
     alpha_update = (

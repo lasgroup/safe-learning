@@ -46,6 +46,7 @@ def make_losses(
     uncertainty_constraint,
     uncertainty_epsilon,
     n_critics,
+    offline,
     target_entropy: float | None = None,
 ):
     target_entropy = -0.5 * action_size if target_entropy is None else target_entropy
@@ -223,7 +224,12 @@ def make_losses(
                 aux["qc_std"] = jnp.std(mean_qc)
             if uncertainty_constraint:
                 q_sigma = qc_action[:, :, :, -1]
-                constraints_list.append(q_sigma.mean() - uncertainty_epsilon)
+                sigma_constraint = q_sigma.mean() - uncertainty_epsilon
+                if offline:
+                    sigma_constraint = (
+                        -sigma_constraint  # penalize high uncertainty if offline
+                    )
+                constraints_list.append(sigma_constraint)
                 aux["q_sigma"] = q_sigma.mean()
             if penalizer is not None:
                 # penalizer

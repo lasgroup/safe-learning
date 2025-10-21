@@ -48,7 +48,8 @@ def make_on_policy_training_step(
     num_model_rollouts,
     penalizer,
     safety_budget,
-    pessimism,
+    reward_pessimism,
+    cost_pessimism,
     model_to_real_data_ratio,
     offline,
     ensemble_size,
@@ -409,9 +410,19 @@ def make_on_policy_training_step(
             else next_obs_pred["state"].std(axis=0).mean(-1)
         )  # (B,)
         transitions.extras["state_extras"]["cost"] += (
-            jnp.expand_dims(disagreement, 1) * pessimism
+            jnp.expand_dims(disagreement, 1) * cost_pessimism
         )
-        return transitions
+        new_reward = (
+            transitions.reward - jnp.expand_dims(disagreement, 1) * reward_pessimism
+        )
+        return Transition(
+            observation=transitions.observation,
+            next_observation=transitions.next_observation,
+            action=transitions.action,
+            reward=new_reward,
+            discount=transitions.discount,
+            extras=transitions.extras,
+        )
 
     def training_step(
         training_state: TrainingState,

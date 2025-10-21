@@ -135,7 +135,7 @@ class PrimalDualLagrangian:
 
         new_params = PrimalDualLagrangianParams(lagrange_multiplier=new_multipliers)
 
-        aux = {"lagrange_multipliers": new_multipliers}
+        aux = {"penalizer_params": new_params}
         return actor_loss, aux, new_params
 
 

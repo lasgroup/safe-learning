@@ -219,25 +219,32 @@ def make_losses(
                     safety_budget - mean_qc
                 )  # one constraint for each idx
                 constraints_list.append(safety_constraint)
-                aux["constraint_estimate"] = safety_constraint
-                aux["cost"] = mean_qc.mean()
+                aux["constraint_estimate_cost"] = safety_constraint
+                aux["q_cost"] = mean_qc.mean()
                 aux["qc_std"] = jnp.std(mean_qc)
             if uncertainty_constraint:
                 q_sigma = qc_action[:, :, :, -1]
                 sigma_constraint = q_sigma.mean() - uncertainty_epsilon
-                if not offline:
-                    constraints_list.append(sigma_constraint)
+                if offline:
+                    sigma_constraint = 0.0
+                constraints_list.append(sigma_constraint)
                 aux["q_sigma"] = q_sigma.mean()
+                aux["constraint_estimate_sigma"] = sigma_constraint
             if penalizer is not None:
                 # penalizer
                 constraints_arr = jnp.concatenate(
                     [jnp.atleast_1d(c) for c in constraints_list], axis=0
                 )
-                actor_loss, penalizer_aux, penalizer_params = penalizer(
+                actor_loss, _, penalizer_params = penalizer(
                     actor_loss, constraints_arr, jax.lax.stop_gradient(penalizer_params)
                 )
                 aux["penalizer_params"] = penalizer_params
-                aux |= penalizer_aux
+                if safe:
+                    aux["cost_multipliers"] = penalizer_params.lagrange_multiplier[
+                        :ensemble_size
+                    ]
+                if uncertainty_constraint:
+                    aux["sigma_multipliers"] = penalizer_params.lagrange_multiplier[-1]
 
         aux["qr_std"] = jnp.std(jnp.mean(qr, axis=-1))
         actor_loss += exploration_loss

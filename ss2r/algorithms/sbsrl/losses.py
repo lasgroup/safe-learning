@@ -235,10 +235,10 @@ def make_losses(
                 constraints_arr = jnp.concatenate(
                     [jnp.atleast_1d(c) for c in constraints_list], axis=0
                 )
-                actor_loss, _, penalizer_params = penalizer(
+                actor_loss, penalizer_aux, penalizer_params = penalizer(
                     actor_loss, constraints_arr, jax.lax.stop_gradient(penalizer_params)
                 )
-                aux["penalizer_params"] = penalizer_params
+                aux |= penalizer_aux
                 if safe:
                     aux["cost_multipliers"] = penalizer_params.lagrange_multiplier[
                         :ensemble_size

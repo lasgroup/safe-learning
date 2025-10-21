@@ -554,6 +554,7 @@ def train(
         num_model_rollouts,
         penalizer,
         safety_budget,
+        pessimism,
         model_to_real_data_ratio,
         offline,
         model_ensemble_size,

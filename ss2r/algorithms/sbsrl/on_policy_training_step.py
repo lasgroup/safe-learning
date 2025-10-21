@@ -48,6 +48,7 @@ def make_on_policy_training_step(
     num_model_rollouts,
     penalizer,
     safety_budget,
+    pessimism,
     model_to_real_data_ratio,
     offline,
     ensemble_size,
@@ -391,6 +392,27 @@ def make_on_policy_training_step(
             extras=transitions.extras,
         )
 
+    def relabel_offline_transitions(
+        planning_env: ModelBasedEnv,
+        transitions: Transition,
+    ):
+        pred_fn = planning_env.model_network.apply
+        model_params = planning_env.model_params
+        normalizer_params = planning_env.normalizer_params
+        vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
+        next_obs_pred, reward, cost = vmap_pred_fn(
+            normalizer_params, model_params, transitions.observation, transitions.action
+        )
+        disagreement = (
+            next_obs_pred.std(axis=0).mean(-1)
+            if isinstance(next_obs_pred, jax.Array)
+            else next_obs_pred["state"].std(axis=0).mean(-1)
+        )  # (B,)
+        transitions.extras["state_extras"]["cost"] += (
+            jnp.expand_dims(disagreement, 1) * pessimism
+        )
+        return transitions
+
     def training_step(
         training_state: TrainingState,
         env_state: envs.State,
@@ -457,6 +479,9 @@ def make_on_policy_training_step(
             )
         else:
             transitions = model_transitions
+
+        if offline:
+            transitions = relabel_offline_transitions(planning_env, transitions)
 
         transitions = jax.tree_util.tree_map(
             lambda x: jnp.reshape(x, (critic_grad_updates_per_step, -1) + x.shape[1:]),

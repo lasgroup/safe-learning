@@ -225,11 +225,8 @@ def make_losses(
             if uncertainty_constraint:
                 q_sigma = qc_action[:, :, :, -1]
                 sigma_constraint = q_sigma.mean() - uncertainty_epsilon
-                if offline:
-                    sigma_constraint = (
-                        -sigma_constraint  # penalize high uncertainty if offline
-                    )
-                constraints_list.append(sigma_constraint)
+                if not offline:
+                    constraints_list.append(sigma_constraint)
                 aux["q_sigma"] = q_sigma.mean()
             if penalizer is not None:
                 # penalizer

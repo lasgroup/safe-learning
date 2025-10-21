@@ -30,7 +30,7 @@ agent:
   uncertainty_constraint: true
   uncertainty_epsilon: 0.0
   model_to_real_data_ratio: 0.25
-  reward_pessimism: -20.
+  reward_pessimism: 20.
   penalizer:
     initial_multiplier_uncertainty: 10
     initial_multiplier_cost: 10

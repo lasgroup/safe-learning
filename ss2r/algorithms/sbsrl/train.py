@@ -418,6 +418,13 @@ def train(
                 backup_target_qc_params=params[4]
                 if safe or uncertainty_constraint
                 else None,
+                model_params=params[10],
+                model_optimizer_state=restore_state(
+                    params[11][1]["inner_state"]
+                    if isinstance(params[11][1], dict)
+                    else params[11],
+                    training_state.model_optimizer_state,
+                ),
             )
         if load_auxiliaries:
             policy_optimizer_state = restore_state(
@@ -779,6 +786,8 @@ def train(
                 training_state.alpha_optimizer_state,
                 training_state.behavior_qr_optimizer_state,
                 training_state.behavior_qc_optimizer_state,
+                training_state.model_params,
+                training_state.model_optimizer_state,
             )
             if store_buffer:
                 params += (model_buffer_state,)
@@ -809,6 +818,8 @@ def train(
         training_state.alpha_optimizer_state,
         training_state.behavior_qr_optimizer_state,
         training_state.behavior_qc_optimizer_state,
+        training_state.model_params,
+        training_state.model_optimizer_state,
     )
     if store_buffer:
         params += (model_buffer_state,)

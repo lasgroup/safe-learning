@@ -36,6 +36,7 @@ def make_losses(
     sbsrl_network: SBSRLNetworks,
     reward_scaling: float,
     cost_scaling: float,
+    sigma_scaling: float,
     discounting: float,
     safety_discounting: float,
     action_size: int,
@@ -89,7 +90,16 @@ def make_losses(
     ) -> jnp.ndarray:
         action = transitions.action
         q_network = qc_network if safe or uncertainty_constraint else qr_network
-        scale = cost_scaling if safe or uncertainty_constraint else reward_scaling
+        scales = []
+        if safe:
+            scales.append(cost_scaling)
+        if uncertainty_constraint:
+            scales.append(sigma_scaling)
+        scale = (
+            jnp.stack(scales, axis=-1)
+            if safe or uncertainty_constraint
+            else reward_scaling
+        )
         gamma = safety_discounting if safe or uncertainty_constraint else discounting
         q_old_action = q_network.apply(
             normalizer_params,

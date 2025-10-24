@@ -80,7 +80,7 @@ class SACCostEnsemble(QTransformation):
         policy: Callable[[jax.Array], tuple[jax.Array, jax.Array]],
         gamma: float,
         alpha: jax.Array | None = None,
-        scale: float = 1.0,
+        scale: jax.Array | None = None,
         key: jax.Array | None = None,
         safe: bool = False,
         uncertainty_constraint: bool = False,

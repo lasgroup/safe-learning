@@ -187,16 +187,7 @@ def make_losses(
         actor_loss = -qr.mean()
         exploration_loss = (alpha * log_prob).mean()
 
-        aux = {}  # now just for logging purpose
-        if uncertainty_constraint:  # TODO: Can remove this whole if
-            model_apply = jax.vmap(
-                sbsrl_network.model_network.apply, (None, 0, None, None)
-            )
-            next_obs_pred, *_ = model_apply(
-                normalizer_params, model_params, transitions.observation, action
-            )
-            disagreement = jnp.mean(jnp.std(next_obs_pred, axis=0))
-            aux["disagreement"] = disagreement
+        aux = {}
         if safe or uncertainty_constraint:
             assert qc_network is not None
             qc_action = jax.vmap(

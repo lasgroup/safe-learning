@@ -387,9 +387,12 @@ def train(
             ts_normalizer_params = get_dict_normalizer_params(
                 params, ts_normalizer_params, 0
             )
-        if isinstance(ts_disagreement_normalizer_params.mean, dict) and not isinstance(
-            params[12].mean, dict
-        ):
+        if (
+            isinstance(ts_disagreement_normalizer_params.mean, dict)
+            and not isinstance(params[12].mean, dict)
+            and params
+            and not (offline and len(params) == 13)
+        ):  # TODO: the last condition is for the case when the data collection doesn't store disagreement_normalizer
             ts_disagreement_normalizer_params = get_dict_normalizer_params(
                 params, ts_disagreement_normalizer_params, 12
             )

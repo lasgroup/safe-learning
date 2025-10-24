@@ -28,6 +28,8 @@ from absl import logging
 from brax import envs
 from brax.training import replay_buffers
 from brax.training.acme import running_statistics, specs
+from brax.training.acme.running_statistics import NestedMeanStd
+from brax.training.acme.types import NestedArray
 from brax.training.agents.sac import checkpoint
 from brax.training.types import PRNGKey
 from ml_collections import config_dict
@@ -264,10 +266,35 @@ def train(
     obs_size = env.observation_size
     action_size = env.action_size
     normalize_fn = lambda x, y: x
-    if normalize_observations or normalize_disagreement:
+    if normalize_observations:
         normalize_fn = functools.partial(
             running_statistics.normalize, max_abs_value=5.0
         )
+
+    def normalize_std(
+        batch: NestedArray,
+        mean_std: NestedMeanStd,
+        max_abs_value: Optional[float] = None,
+    ) -> NestedArray:
+        """Normalizes disagreement by dividing by std"""
+
+        def normalize_leaf(data: jnp.ndarray, std: jnp.ndarray) -> jnp.ndarray:
+            # Only normalize floating-point types
+            if not jnp.issubdtype(data.dtype, jnp.inexact):
+                return data
+            data = data / std
+            if max_abs_value is not None:
+                data = jnp.clip(data, -max_abs_value, +max_abs_value)
+            return data
+
+        # Apply to each leaf of the pytree
+        return jax.tree_util.tree_map(
+            lambda d, m, s: normalize_leaf(d, s), batch, mean_std.mean, mean_std.std
+        )
+
+    disagreement_normalize_fn = lambda x, y: x
+    if normalize_disagreement:
+        disagreement_normalize_fn = functools.partial(normalize_std, max_abs_value=5.0)
 
     sbsrl_network = network_factory(
         observation_size=obs_size["state"]
@@ -579,7 +606,7 @@ def train(
         offline,
         model_ensemble_size,
         sac_batch_size,
-        normalize_fn,
+        disagreement_normalize_fn,
     )
 
     def prefill_replay_buffer(

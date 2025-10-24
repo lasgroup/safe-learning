@@ -21,9 +21,7 @@ from ss2r.algorithms.sbsrl.types import TrainingState, TrainingStepFn
 
 def make_on_policy_training_step(
     env,
-    make_planning_policy,
-    make_rollout_policy,
-    get_rollout_policy_params,
+    make_policy,
     make_model_env,
     model_replay_buffer,
     sac_replay_buffer,
@@ -311,8 +309,8 @@ def make_on_policy_training_step(
         experience_key, training_key = jax.random.split(key)
         normalizer_params, env_state, buffer_state = get_experience_fn(
             env,
-            make_rollout_policy,
-            get_rollout_policy_params(training_state),
+            make_policy,
+            training_state.behavior_policy_params,
             training_state.normalizer_params,
             model_replay_buffer,
             env_state,
@@ -493,7 +491,7 @@ def make_on_policy_training_step(
             transitions=transitions,
         )
         planning_env = VmapWrapper(planning_env)
-        policy = make_planning_policy(
+        policy = make_policy(
             (training_state.normalizer_params, training_state.behavior_policy_params)
         )
         # Rollout trajectories from the sampled transitions

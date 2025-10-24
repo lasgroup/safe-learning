@@ -359,7 +359,7 @@ def make_on_policy_training_step(
             disagreement, training_state.disagreement_normalizer_params
         )
         transitions.extras["state_extras"]["disagreement"] = jnp.full(
-            transitions.extras["state_extras"]["cost"].shape, disagreement
+            transitions.reward.shape, disagreement
         )  # (B,ensemble_size)
         sac_replay_buffer_state = sac_replay_buffer.insert(
             sac_replay_buffer_state, float16(transitions)

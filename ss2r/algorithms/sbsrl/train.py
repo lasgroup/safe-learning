@@ -419,7 +419,7 @@ def train(
             and not isinstance(params[12].mean, dict)
             and params
             and not (offline and len(params) == 13)
-        ):  # TODO: the last condition is for the case when the data collection doesn't store disagreement_normalizer
+        ):
             ts_disagreement_normalizer_params = get_dict_normalizer_params(
                 params, ts_disagreement_normalizer_params, 12
             )
@@ -568,7 +568,6 @@ def train(
         scaling_fn=budget_scaling_fn,
         use_termination=penalizer is not None and use_termination,
         safety_filter=safety_filter,
-        initial_normalizer_params=training_state.normalizer_params,  # TODO: initial_normalizer_params seems not to be used
     )
     training_step = make_training_step_fn(
         env,
@@ -623,7 +622,7 @@ def train(
                 new_normalizer_params,
                 env_state,
                 buffer_state,
-            ) = get_experience_fn(  # TODO: I don't think I need normalize_disagreement here because these are real transitions?
+            ) = get_experience_fn(
                 env,
                 make_rollout_policy,
                 get_rollout_policy_params(training_state),
@@ -768,7 +767,7 @@ def train(
     if num_evals > 1:
         metrics = evaluator.run_evaluation(
             (
-                training_state.normalizer_params,  # TODO: need also disagreement_params?
+                training_state.normalizer_params,
                 get_rollout_policy_params(training_state),
             ),
             training_metrics={},
@@ -841,7 +840,7 @@ def train(
         # Run evals.
         metrics = evaluator.run_evaluation(
             (
-                training_state.normalizer_params,  # TODO: need also disagreement_params?
+                training_state.normalizer_params,
                 get_rollout_policy_params(training_state),
             ),
             training_metrics,

@@ -22,7 +22,6 @@ class ModelBasedEnv(envs.Env):
         scaling_fn=lambda x: x,
         use_termination=True,
         safety_filter="sooper",
-        initial_normalizer_params=None,
     ):
         super().__init__()
         self.model_network = sbsrl_network.model_network
@@ -43,9 +42,6 @@ class ModelBasedEnv(envs.Env):
         self.scaling_fn = scaling_fn
         self.use_termination = use_termination
         self.safety_filter = safety_filter
-        self.initial_normalizer_params = (
-            initial_normalizer_params if initial_normalizer_params is not None else {}
-        )
 
     def reset(self, rng: jax.Array) -> base.State:
         sample_key, model_key = jax.random.split(rng)
@@ -133,7 +129,6 @@ def create_model_env(
     scaling_fn=lambda x: x,
     use_termination=True,
     safety_filter="sooper",
-    initial_normalizer_params=None,
 ) -> ModelBasedEnv:
     """Factory function to create a model-based environment."""
     return ModelBasedEnv(
@@ -148,7 +143,6 @@ def create_model_env(
         scaling_fn=scaling_fn,
         use_termination=use_termination,
         safety_filter=safety_filter,
-        initial_normalizer_params=initial_normalizer_params,
     )
 
 

@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from brax import envs
 from brax.envs.wrappers.training import VmapWrapper
 from brax.training import acting
+from brax.training.acme import running_statistics
 from brax.training.types import Policy, PRNGKey
 
 from ss2r.algorithms.sac.types import (
@@ -54,6 +55,7 @@ def make_on_policy_training_step(
     offline,
     ensemble_size,
     sac_batch_size,
+    normalize_fn,
 ) -> TrainingStepFn:
     def split_transitions_ensemble(
         transitions: Transition, ensemble_axis: int = 1
@@ -325,11 +327,12 @@ def make_on_policy_training_step(
         return training_state, env_state, buffer_state, training_key
 
     def generate_model_data(
+        training_state: TrainingState,
         planning_env: ModelBasedEnv,
         policy: Policy,
         sac_replay_buffer_state: ReplayBufferState,
         key: PRNGKey,
-    ) -> ReplayBufferState:
+    ) -> Tuple[TrainingState, ReplayBufferState, Metrics]:
         keys = jax.random.split(key, num_model_rollouts + 2)
         key = keys[0]
         key_generate_unroll = keys[1]
@@ -345,13 +348,29 @@ def make_on_policy_training_step(
             key_generate_unroll,
             extra_fields=extra_fields_model,
         )
+        disagreement = jnp.expand_dims(
+            transitions.extras["state_extras"]["disagreement"], axis=1
+        )  # (B,1)
+        new_disagreement_normalizer_params = running_statistics.update(
+            training_state.disagreement_normalizer_params, disagreement
+        )
+        training_state = training_state.replace(  # type: ignore
+            disagreement_normalizer_params=new_disagreement_normalizer_params
+        )
+        disagreement = normalize_fn(
+            disagreement, training_state.disagreement_normalizer_params
+        )
+        transitions.extras["state_extras"]["disagreement"] = jnp.full(
+            transitions.extras["state_extras"]["cost"].shape, disagreement
+        )  # (B,ensemble_size)
         sac_replay_buffer_state = sac_replay_buffer.insert(
             sac_replay_buffer_state, float16(transitions)
         )
-
-        return sac_replay_buffer_state
+        disagreement_metrics = {"normalized_disagreement": disagreement.mean()}
+        return training_state, sac_replay_buffer_state, disagreement_metrics
 
     def relabel_real_transitions(
+        training_state: TrainingState,
         planning_env: ModelBasedEnv,
         transitions: Transition,
     ):
@@ -367,6 +386,17 @@ def make_on_policy_training_step(
             if isinstance(next_obs_pred, jax.Array)
             else next_obs_pred["state"].std(axis=0).mean(-1)
         )  # (B,)
+        disagreement = jnp.expand_dims(disagreement, axis=1)  # (B, 1)
+        new_disagreement_normalizer_params = running_statistics.update(
+            training_state.disagreement_normalizer_params, disagreement
+        )
+        training_state = training_state.replace(  # type: ignore
+            disagreement_normalizer_params=new_disagreement_normalizer_params
+        )
+        disagreement = normalize_fn(
+            disagreement, training_state.disagreement_normalizer_params
+        )
+
         new_reward = jnp.tile(transitions.reward[:, None], (1, ensemble_size))
         new_discount = jnp.tile(transitions.discount[:, None], (1, ensemble_size))
         new_next_observation = jnp.tile(
@@ -377,14 +407,14 @@ def make_on_policy_training_step(
             (1, ensemble_size),
         )
         transitions.extras["state_extras"]["disagreement"] = jnp.tile(
-            disagreement[:, None], (1, ensemble_size)
+            disagreement, (1, ensemble_size)
         )
         if safe:
             transitions.extras["state_extras"]["cost"] = jnp.tile(
                 transitions.extras["state_extras"]["cost"][:, None], (1, ensemble_size)
             )
 
-        return Transition(
+        return training_state, Transition(
             observation=transitions.observation,
             next_observation=new_next_observation,
             action=transitions.action,
@@ -467,8 +497,8 @@ def make_on_policy_training_step(
             (training_state.normalizer_params, training_state.behavior_policy_params)
         )
         # Rollout trajectories from the sampled transitions
-        sac_buffer_state = generate_model_data(
-            planning_env, policy, sac_buffer_state, training_key
+        training_state, sac_buffer_state, disagreement_metrics = generate_model_data(
+            training_state, planning_env, policy, sac_buffer_state, training_key
         )
         # Train SAC with model data
         sac_buffer_state, model_transitions = sac_replay_buffer.sample(sac_buffer_state)
@@ -481,7 +511,9 @@ def make_on_policy_training_step(
             num_real_transitions <= transitions.reward.shape[0]
         ), "More model minibatches than real minibatches"
         if num_real_transitions >= 1:
-            transitions = relabel_real_transitions(planning_env, transitions)
+            training_state, transitions = relabel_real_transitions(
+                training_state, planning_env, transitions
+            )
             transitions = float16(transitions)
             transitions = jax.tree_util.tree_map(
                 lambda x, y: x.at[:num_real_transitions].set(y[:num_real_transitions]),
@@ -517,6 +549,7 @@ def make_on_policy_training_step(
         metrics = {**model_metrics, **critic_metrics, **actor_metrics}
         metrics["buffer_current_size"] = model_replay_buffer.size(model_buffer_state)
         metrics |= env_state.metrics
+        metrics |= disagreement_metrics
         return (
             training_state,
             env_state,

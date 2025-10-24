@@ -57,20 +57,20 @@ from ss2r.rl.evaluation import ConstraintsEvaluator, InterventionConstraintsEval
 from ss2r.rl.utils import restore_state
 
 
-def get_dict_normalizer_params(params, ts_normalizer_params):
+def get_dict_normalizer_params(params, ts_normalizer_params, idx):
     mean = {
-        "state": params[0].mean,
+        "state": params[idx].mean,
         "cumulative_cost": ts_normalizer_params.mean["cumulative_cost"],
     }
     std = {
-        "state": params[0].std,
+        "state": params[idx].std,
         "cumulative_cost": ts_normalizer_params.std["cumulative_cost"],
     }
     summed_var = {
-        "state": params[0].summed_variance,
+        "state": params[idx].summed_variance,
         "cumulative_cost": ts_normalizer_params.summed_variance["cumulative_cost"],
     }
-    count = params[0].count
+    count = params[idx].count
     ts_normalizer_params = ts_normalizer_params.replace(
         mean=mean,
         std=std,
@@ -122,6 +122,8 @@ def _init_training_state(
     else:
         obs_shape = specs.Array((obs_size,), jnp.dtype("float32"))
     normalizer_params = running_statistics.init_state(obs_shape)
+    disagreement_shape = specs.Array((1,), jnp.dtype("float32"))
+    disagreement_normalizer_params = running_statistics.init_state(disagreement_shape)
     training_state = TrainingState(
         behavior_policy_optimizer_state=policy_optimizer_state,
         behavior_policy_params=policy_params,
@@ -143,6 +145,7 @@ def _init_training_state(
         alpha_optimizer_state=alpha_optimizer_state,
         alpha_params=log_alpha,
         normalizer_params=normalizer_params,
+        disagreement_normalizer_params=disagreement_normalizer_params,
         penalizer_params=penalizer_params,
     )  #  type: ignore
     return training_state
@@ -172,6 +175,7 @@ def train(
     sac_batch_size: int = 256,
     num_evals: int = 1,
     normalize_observations: bool = False,
+    normalize_disagreement: bool = False,
     reward_scaling: float = 1.0,
     cost_scaling: float = 1.0,
     tau: float = 0.005,
@@ -260,7 +264,7 @@ def train(
     obs_size = env.observation_size
     action_size = env.action_size
     normalize_fn = lambda x, y: x
-    if normalize_observations:
+    if normalize_observations or normalize_disagreement:
         normalize_fn = functools.partial(
             running_statistics.normalize, max_abs_value=5.0
         )
@@ -374,20 +378,31 @@ def train(
     if restore_checkpoint_path is not None:
         params = checkpoint.load(restore_checkpoint_path)
         ts_normalizer_params = training_state.normalizer_params
+        ts_disagreement_normalizer_params = (
+            training_state.disagreement_normalizer_params
+        )
         if isinstance(ts_normalizer_params.mean, dict) and not isinstance(
             params[0].mean, dict
         ):
             ts_normalizer_params = get_dict_normalizer_params(
-                params, ts_normalizer_params
+                params, ts_normalizer_params, 0
+            )
+        if isinstance(ts_disagreement_normalizer_params.mean, dict) and not isinstance(
+            params[12].mean, dict
+        ):
+            ts_disagreement_normalizer_params = get_dict_normalizer_params(
+                params, ts_disagreement_normalizer_params, 12
             )
         if offline:
             model_buffer_state = replay_buffers.ReplayBufferState(**params[-1])
             training_state = training_state.replace(  # type: ignore
-                normalizer_params=ts_normalizer_params
+                normalizer_params=ts_normalizer_params,
+                disagreement_normalizer_params=ts_disagreement_normalizer_params,
             )
         elif learn_from_scratch:
             training_state = training_state.replace(  # type: ignore
                 normalizer_params=ts_normalizer_params,
+                disagreement_normalizer_params=ts_disagreement_normalizer_params,
                 backup_policy_params=params[1],
                 backup_qr_params=params[3],
                 backup_qc_params=params[4] if safe or uncertainty_constraint else None,
@@ -422,6 +437,7 @@ def train(
                 )
             training_state = training_state.replace(  # type: ignore
                 normalizer_params=ts_normalizer_params,
+                disagreement_normalizer_params=ts_disagreement_normalizer_params,
                 behavior_policy_params=params[1],
                 backup_policy_params=params[1],
                 behavior_qr_params=params[3],
@@ -522,7 +538,7 @@ def train(
         scaling_fn=budget_scaling_fn,
         use_termination=penalizer is not None and use_termination,
         safety_filter=safety_filter,
-        initial_normalizer_params=training_state.normalizer_params,
+        initial_normalizer_params=training_state.normalizer_params,  # TODO: initial_normalizer_params seems not to be used
     )
     training_step = make_training_step_fn(
         env,
@@ -560,6 +576,7 @@ def train(
         offline,
         model_ensemble_size,
         sac_batch_size,
+        normalize_fn,
     )
 
     def prefill_replay_buffer(
@@ -572,7 +589,11 @@ def train(
             del unused
             training_state, env_state, buffer_state, key = carry
             key, new_key = jax.random.split(key)
-            new_normalizer_params, env_state, buffer_state = get_experience_fn(
+            (
+                new_normalizer_params,
+                env_state,
+                buffer_state,
+            ) = get_experience_fn(  # TODO: I don't think I need normalize_disagreement here because these are real transitions?
                 env,
                 make_rollout_policy,
                 get_rollout_policy_params(training_state),
@@ -717,7 +738,7 @@ def train(
     if num_evals > 1:
         metrics = evaluator.run_evaluation(
             (
-                training_state.normalizer_params,
+                training_state.normalizer_params,  # TODO: need also disagreement_params?
                 get_rollout_policy_params(training_state),
             ),
             training_metrics={},
@@ -780,6 +801,7 @@ def train(
                 training_state.behavior_qc_optimizer_state,
                 training_state.model_params,
                 training_state.model_optimizer_state,
+                training_state.disagreement_normalizer_params,
             )
             if store_buffer:
                 params += (model_buffer_state,)
@@ -789,7 +811,7 @@ def train(
         # Run evals.
         metrics = evaluator.run_evaluation(
             (
-                training_state.normalizer_params,
+                training_state.normalizer_params,  # TODO: need also disagreement_params?
                 get_rollout_policy_params(training_state),
             ),
             training_metrics,
@@ -812,6 +834,7 @@ def train(
         training_state.behavior_qc_optimizer_state,
         training_state.model_params,
         training_state.model_optimizer_state,
+        training_state.disagreement_normalizer_params,
     )
     if store_buffer:
         params += (model_buffer_state,)

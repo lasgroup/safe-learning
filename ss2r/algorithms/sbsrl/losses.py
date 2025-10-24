@@ -188,7 +188,7 @@ def make_losses(
         exploration_loss = (alpha * log_prob).mean()
 
         aux = {}  # now just for logging purpose
-        if uncertainty_constraint:
+        if uncertainty_constraint:  # TODO: Can remove this whole if
             model_apply = jax.vmap(
                 sbsrl_network.model_network.apply, (None, 0, None, None)
             )

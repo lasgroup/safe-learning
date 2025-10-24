@@ -95,7 +95,7 @@ class ModelBasedEnv(envs.Env):
             if isinstance(next_obs, jax.Array)
             else next_obs["state"].std(axis=0).mean(-1)
         )
-        state.info["disagreement"] = jnp.full(cost.shape, disagreement)
+        state.info["disagreement"] = disagreement
 
         state = state.replace(
             obs=next_obs,

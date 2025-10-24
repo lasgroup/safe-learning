@@ -33,6 +33,7 @@ class TrainingState:
     alpha_optimizer_state: optax.OptState
     alpha_params: Params
     normalizer_params: running_statistics.RunningStatisticsState
+    disagreement_normalizer_params: running_statistics.RunningStatisticsState
     penalizer_params: Params
 
 

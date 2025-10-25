@@ -227,7 +227,7 @@ def make_losses(
                 q_sigma = qc_action[:, :, :, -1]
                 sigma_constraint = q_sigma.mean() - uncertainty_epsilon
                 if offline:
-                    sigma_constraint = 0.0
+                    sigma_constraint = -sigma_constraint
                 constraints_list.append(sigma_constraint)
                 aux["q_sigma"] = q_sigma.mean()
                 aux["constraint_estimate_sigma"] = sigma_constraint

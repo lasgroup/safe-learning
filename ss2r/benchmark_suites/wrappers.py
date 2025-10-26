@@ -160,7 +160,9 @@ class NonEpisodicWrapper(Wrapper):
         return state
 
     def step(self, state: State, action: jax.Array) -> State:
-        before_done = state.done | state.info["truncation"]
+        before_done = state.done.astype(jp.bool) | state.info["truncation"].astype(
+            jp.bool
+        )
 
         def f(state, _):
             nstate = self.env.step(state, action)
@@ -187,7 +189,7 @@ class NonEpisodicWrapper(Wrapper):
         state.info["average_reward"] = average_reward
         state.metrics["average_reward"] = average_reward
         # Ignore everything that happens after the first done
-        state.info["truncation"] = before_done
+        state.info["truncation"] = before_done.astype(jp.float32)
         state.metrics["alive"] = jp.where(before_done, 0.0, 1.0)
         return state
 

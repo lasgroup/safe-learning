@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jp
 import mujoco
 from ml_collections import config_dict
+from mujoco import mjx
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src.dm_control_suite import humanoid
 
@@ -31,13 +32,36 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
     def __init__(
         self,
         move_speed: float = 0.0,
-        config: config_dict.ConfigDict = humanoid.default_config(),
+        config: config_dict.ConfigDict = default_config(),
         config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
     ):
         super().__init__(
             move_speed=move_speed, config=config, config_overrides=config_overrides
         )
+
+        self._xml_path = humanoid._XML_PATH.as_posix()
+        mj_spec = mujoco.MjSpec.from_file(
+            filename=str(humanoid._XML_PATH), assets=humanoid.common.get_assets()
+        )
+        self._mj_model = self._modify_model(mj_spec)
+        self._mjx_model = mjx.put_model(self._mj_model)
         self.ground_start_probability = config.ground_start_probability
+        self._post_init()
+
+    def _modify_model(self, mj_spec: mujoco.MjSpec) -> mujoco.MjModel:
+        mj_spec.add_sensor(
+            type=mujoco.mjtSensor.mjSENS_FORCE,
+            name="head_force",
+            objtype=mujoco.mjtObj.mjOBJ_SITE,
+            objname="head",
+        )
+        mj_spec.add_sensor(
+            type=mujoco.mjtSensor.mjSENS_FORCE,
+            name="torso_force",
+            objtype=mujoco.mjtObj.mjOBJ_SITE,
+            objname="torso",
+        )
+        return mj_spec.compile()
 
     def _post_init(self):
         super()._post_init()
@@ -139,4 +163,12 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
             standing | upright, jp.zeros_like(outs.reward), jp.ones_like(outs.reward)
         )
         outs.metrics["reward/on_ground"] = (standing < 0.5).astype(jp.float32)
+        torso_force = (
+            mjx_env.get_sensor_data(self.mj_model, state.data, "torso_force") > 1250.0
+        )
+        head_force = (
+            mjx_env.get_sensor_data(self.mj_model, state.data, "head_force") > 1000.0
+        )
+        done = torso_force | head_force
+        outs = outs.replace(done=done.astype(jp.float32))
         return outs

@@ -302,6 +302,8 @@ def train(
             "expected_total_cost": jnp.zeros(()),
             "q_c": jnp.zeros(()),
         }
+        if safety_filter == "nonepisodic":
+            extras["policy_extras"]["behavior_action"] = dummy_action  # type: ignore
 
     dummy_transition = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
         observation=dummy_obs,

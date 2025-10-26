@@ -79,6 +79,7 @@ def make_nonepisodic_filter_fn(
                 "cumulative_cost": qc,
                 "expected_total_cost": expected_total_cost,
                 "q_c": qc,
+                "behavior_action": behavioral_action,
             }
             return safe_action, extras
 

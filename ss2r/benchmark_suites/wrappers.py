@@ -154,6 +154,7 @@ class NonEpisodicWrapper(Wrapper):
         metrics = {
             "average_reward": state.info["average_reward"],
             "alive": jp.ones_like(state.done),
+            "total_steps": state.info["steps"],
         }
         state.info["truncation"] = jp.zeros(rng.shape[:-1])
         state.metrics.update(metrics)
@@ -174,12 +175,16 @@ class NonEpisodicWrapper(Wrapper):
         sum_rewards = jp.sum(rewards, axis=0) * (1.0 - dead.astype(jp.float32))
         state = state.replace(reward=sum_rewards)
         if maybe_costs is not None:
-            state.info["cost"] = jp.sum(maybe_costs, axis=0) * (1.0 - dead)
+            state.info["cost"] = jp.sum(maybe_costs, axis=0) * (
+                1.0 - dead.astype(jp.float32)
+            )
         if maybe_eval_rewards is not None:
             state.info["eval_reward"] = jp.sum(maybe_eval_rewards, axis=0) * (
                 1.0 - dead
             )
-        steps = state.info["steps"] + self.action_repeat
+        steps = state.info["steps"] + self.action_repeat * (
+            1.0 - dead.astype(jp.float32)
+        )
         sum_rewards /= self.action_repeat
         average_reward = (
             state.info["average_reward"]
@@ -191,6 +196,7 @@ class NonEpisodicWrapper(Wrapper):
         # Ignore everything that happens after the first done
         state.info["truncation"] = dead.astype(jp.float32)
         state.metrics["alive"] = 1.0 - dead.astype(jp.float32)
+        state.metrics["total_steps"] = steps
         return state
 
 

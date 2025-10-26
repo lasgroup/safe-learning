@@ -157,12 +157,13 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
 
     def step(self, state: mjx_env.State, action: jax.Array) -> mjx_env.State:
         outs = super().step(state, action)
-        standing = self._head_height(outs.data) > humanoid._STAND_HEIGHT
+        head_height = self._head_height(outs.data)
+        standing = head_height > humanoid._STAND_HEIGHT
         upright = self._torso_upright(outs.data) > 0.9
         outs.info["cost"] = jp.where(
             standing | upright, jp.zeros_like(outs.reward), jp.ones_like(outs.reward)
         )
-        outs.metrics["reward/on_ground"] = (standing < 0.5).astype(jp.float32)
+        outs.metrics["reward/on_ground"] = (head_height < 0.5).astype(jp.float32)
         # torso_force = (
         #     jp.linalg.norm(
         #         mjx_env.get_sensor_data(self.mj_model, state.data, "torso_force")
@@ -176,6 +177,6 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
         #     > 1000.0
         # )
         # done = torso_force | head_force
-        done = standing < 0.5
+        done = head_height < 0.5
         outs = outs.replace(done=done.astype(jp.float32))
         return outs

@@ -125,6 +125,7 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
             "reward/stand": jp.zeros(()),
             "reward/small_control": jp.zeros(()),
             "reward/move": jp.zeros(()),
+            "reward/on_ground": jp.zeros(()),
         }
         obs = self._get_obs(data, info)
         reward, done = jp.zeros(2)
@@ -137,4 +138,5 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
         outs.info["cost"] = jp.where(
             standing | upright, jp.zeros_like(outs.reward), jp.ones_like(outs.reward)
         )
+        outs.metrics["reward/on_ground"] = (standing < 0.5).astype(jp.float32)
         return outs

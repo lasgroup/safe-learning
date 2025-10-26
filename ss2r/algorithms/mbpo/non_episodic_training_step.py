@@ -42,8 +42,8 @@ def make_non_episodic_training_step(
         key, key_alpha, key_critic, key_actor = jax.random.split(key, 4)
         new_buffer_state, transitions = sac_replay_buffer.sample(sac_buffer_state)
         transitions = float32(transitions)
-        behavior_action = transitions.extras["policy_extras"]["behavior_action"]
         if override_actions:
+            behavior_action = transitions.extras["policy_extras"]["behavior_action"]
             actor_critic_transitions = transitions._replace(action=behavior_action)
         else:
             actor_critic_transitions = transitions

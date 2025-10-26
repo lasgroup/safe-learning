@@ -163,18 +163,19 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
             standing | upright, jp.zeros_like(outs.reward), jp.ones_like(outs.reward)
         )
         outs.metrics["reward/on_ground"] = (standing < 0.5).astype(jp.float32)
-        torso_force = (
-            jp.linalg.norm(
-                mjx_env.get_sensor_data(self.mj_model, state.data, "torso_force")
-            )
-            > 1250.0
-        )
-        head_force = (
-            jp.linalg.norm(
-                mjx_env.get_sensor_data(self.mj_model, state.data, "head_force")
-            )
-            > 1000.0
-        )
-        done = torso_force | head_force
+        # torso_force = (
+        #     jp.linalg.norm(
+        #         mjx_env.get_sensor_data(self.mj_model, state.data, "torso_force")
+        #     )
+        #     > 1250.0
+        # )
+        # head_force = (
+        #     jp.linalg.norm(
+        #         mjx_env.get_sensor_data(self.mj_model, state.data, "head_force")
+        #     )
+        #     > 1000.0
+        # )
+        # done = torso_force | head_force
+        done = standing < 0.5
         outs = outs.replace(done=done.astype(jp.float32))
         return outs

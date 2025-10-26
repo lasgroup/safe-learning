@@ -44,6 +44,7 @@ def make_losses(
     normalize_fn,
     ensemble_size,
     safe,
+    use_mean_critic,
     uncertainty_constraint,
     uncertainty_epsilon,
     n_critics,
@@ -216,8 +217,11 @@ def make_losses(
             if safe:
                 q_c = qc_action[:, :, :, 0]
                 mean_qc = jnp.mean(q_c, axis=(1, 2))
+                qc_constr = mean_qc
+                if use_mean_critic:
+                    qc_constr = mean_qc.mean()
                 safety_constraint = (
-                    safety_budget - mean_qc
+                    safety_budget - qc_constr
                 )  # one constraint for each idx
                 constraints_list.append(safety_constraint)
                 aux["constraint_estimate_cost"] = safety_constraint
@@ -246,7 +250,7 @@ def make_losses(
                     ]
                 if uncertainty_constraint:
                     aux["sigma_multipliers"] = penalizer_params.lagrange_multiplier[-1]
-
+        aux["q_reward"] = qr.mean()
         aux["qr_std"] = jnp.std(jnp.mean(qr, axis=-1))
         actor_loss += exploration_loss
         return actor_loss, aux

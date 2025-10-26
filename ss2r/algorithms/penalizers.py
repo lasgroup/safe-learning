@@ -250,10 +250,13 @@ def get_penalizer(cfg):
         n_constraints = 0
         initial_list = []
         if cfg.training.get("safe", False):
-            n_constraints += cfg.agent["model_ensemble_size"]
+            n_safety_constraints = cfg.agent["model_ensemble_size"]
+            if cfg.agent.use_mean_critic:
+                n_safety_constraints = 1
+            n_constraints += n_safety_constraints
             initial_list.append(
                 cfg.agent.penalizer.initial_multiplier_cost
-                * jnp.ones(cfg.agent["model_ensemble_size"])
+                * jnp.ones(n_safety_constraints)
             )
         if cfg.agent.get("uncertainty_constraint", False):
             n_constraints += 1

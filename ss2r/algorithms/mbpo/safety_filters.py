@@ -64,11 +64,7 @@ def make_nonepisodic_filter_fn(
             expected_total_cost = qc
             backup_action = backup_policy(observations, key_sample)[0]
             safe = expected_total_cost[..., None] < safety_budget
-            safe_action = jnp.where(
-                safe,
-                behavioral_action,
-                backup_action,
-            )
+            safe_action = jnp.where(safe, behavioral_action, backup_action)
             extras = {
                 "intervention": 1 - safe[..., 0].astype(jnp.float32),
                 "policy_distance": jnp.linalg.norm(mode_a - safe_action, axis=-1),

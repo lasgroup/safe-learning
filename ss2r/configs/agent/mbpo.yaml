@@ -54,3 +54,4 @@ target_entropy: null
 pure_exploration_steps: null
 training_step_fn: on_policy
 pessimistic_q: false
+override_actions: true

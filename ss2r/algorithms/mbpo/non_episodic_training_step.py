@@ -33,6 +33,7 @@ def make_non_episodic_training_step(
     num_critic_updates_per_actor_update,
     safety_budget,
     qc_netwrok,
+    override_actions,
 ) -> TrainingStepFn:
     def sgd_step(
         carry: Tuple[TrainingState, ReplayBufferState, PRNGKey, int], unused_t
@@ -42,7 +43,10 @@ def make_non_episodic_training_step(
         new_buffer_state, transitions = sac_replay_buffer.sample(sac_buffer_state)
         transitions = float32(transitions)
         behavior_action = transitions.extras["policy_extras"]["behavior_action"]
-        actor_critic_transitions = transitions._replace(action=behavior_action)
+        if override_actions:
+            actor_critic_transitions = transitions._replace(action=behavior_action)
+        else:
+            actor_critic_transitions = transitions
         alpha_loss, alpha_params, alpha_optimizer_state = alpha_update(
             training_state.alpha_params,
             training_state.behavior_policy_params,

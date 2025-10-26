@@ -385,8 +385,11 @@ def train(
     sac_replay_buffer = replay_buffers.UniformSamplingQueue(
         max_replay_size=max_replay_size,
         dummy_data_sample=dummy_transition_sac,
-        sample_batch_size=sac_batch_size * critic_grad_updates_per_step,
+        sample_batch_size=sac_batch_size,
     )
+    num_model_rollouts = int(
+        critic_grad_updates_per_step * sac_batch_size * model_to_real_data_ratio
+    )  # TODO: attention here: num_model_rollouts, sac_batch_size, critic_grad_updates_per_step, batch_size, model_grad_update_per_step cannot be chosen arbitrarily anymore?
     model_buffer_state = model_replay_buffer.init(model_rb_key)
     sac_buffer_state = sac_replay_buffer.init(actor_critic_rb_key)
     if restore_checkpoint_path is not None:

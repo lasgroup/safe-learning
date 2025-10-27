@@ -360,9 +360,16 @@ def train(
     num_model_rollouts = int(
         critic_grad_updates_per_step * sac_batch_size * model_to_real_data_ratio
     )  # TODO: attention here: num_model_rollouts, sac_batch_size, critic_grad_updates_per_step, batch_size, model_grad_update_per_step cannot be chosen arbitrarily anymore?
-    model_grad_updates_per_step = int(
-        (num_model_rollouts * (1 - model_to_real_data_ratio) / model_to_real_data_ratio)
-        / batch_size
+    model_grad_updates_per_step = (
+        int(
+            (
+                num_model_rollouts
+                * (1 - model_to_real_data_ratio)
+                / model_to_real_data_ratio
+            )
+            / batch_size
+        )
+        + 1
     )
     model_replay_buffer = replay_buffers.UniformSamplingQueue(
         max_replay_size=max_replay_size,

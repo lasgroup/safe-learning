@@ -22,7 +22,7 @@ def default_config() -> config_dict.ConfigDict:
         episode_length=1000,
         action_repeat=1,
         vision=False,
-        ground_start_probability=1.0,
+        ground_start_probability=0.0,
     )
 
 
@@ -50,14 +50,14 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
 
     def _modify_model(self, mj_spec: mujoco.MjSpec) -> mujoco.MjModel:
         mj_spec.add_sensor(
-            type=mujoco.mjtSensor.mjSENS_FORCE,
-            name="head_force",
+            type=mujoco.mjtSensor.mjSENS_TOUCH,
+            name="head_touch",
             objtype=mujoco.mjtObj.mjOBJ_SITE,
             objname="head",
         )
         mj_spec.add_sensor(
-            type=mujoco.mjtSensor.mjSENS_FORCE,
-            name="torso_force",
+            type=mujoco.mjtSensor.mjSENS_TOUCH,
+            name="torso_touch",
             objtype=mujoco.mjtObj.mjOBJ_SITE,
             objname="torso",
         )
@@ -159,24 +159,25 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
         outs = super().step(state, action)
         head_height = self._head_height(outs.data)
         standing = head_height > humanoid._STAND_HEIGHT
-        upright = self._torso_upright(outs.data) > 0.9
+        torso_height = self._torso_upright(outs.data)
+        upright = torso_height > 0.9
         outs.info["cost"] = jp.where(
             standing | upright, jp.zeros_like(outs.reward), jp.ones_like(outs.reward)
         )
-        outs.metrics["reward/on_ground"] = (head_height < 0.5).astype(jp.float32)
-        # torso_force = (
-        #     jp.linalg.norm(
-        #         mjx_env.get_sensor_data(self.mj_model, state.data, "torso_force")
-        #     )
-        #     > 1250.0
-        # )
-        # head_force = (
-        #     jp.linalg.norm(
-        #         mjx_env.get_sensor_data(self.mj_model, state.data, "head_force")
-        #     )
-        #     > 1000.0
-        # )
-        # done = torso_force | head_force
-        done = head_height < 0.5
+        on_ground = (head_height < 0.1) | (torso_height < 0.1)
+        outs.metrics["reward/on_ground"] = on_ground.astype(jp.float32)
+        torso_force = (
+            jp.linalg.norm(
+                mjx_env.get_sensor_data(self.mj_model, state.data, "torso_touch")
+            )
+            > 1000.0
+        )
+        head_force = (
+            jp.linalg.norm(
+                mjx_env.get_sensor_data(self.mj_model, state.data, "head_touch")
+            )
+            > 1000.0
+        )
+        done = on_ground & (torso_force | head_force)
         outs = outs.replace(done=done.astype(jp.float32))
         return outs

@@ -515,7 +515,6 @@ def make_on_policy_training_step(
             * (1 - model_to_real_data_ratio)
             / model_to_real_data_ratio  # TODO: see what I modified in train.py
         )
-
         assert (
             num_real_transitions <= transitions.reward.shape[0]
         ), "More model minibatches than real minibatches"
@@ -542,6 +541,7 @@ def make_on_policy_training_step(
         metrics["buffer_current_size"] = model_replay_buffer.size(model_buffer_state)
         metrics |= env_state.metrics
         metrics |= disagreement_metrics
+        metrics |= model_metrics
         return (
             training_state,
             env_state,

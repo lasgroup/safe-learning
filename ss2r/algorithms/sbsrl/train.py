@@ -371,6 +371,7 @@ def train(
         )
         + 1
     )
+    logging.info(f"Model grad updates per step: {model_grad_updates_per_step}")
     model_replay_buffer = replay_buffers.UniformSamplingQueue(
         max_replay_size=max_replay_size,
         dummy_data_sample=dummy_transition,

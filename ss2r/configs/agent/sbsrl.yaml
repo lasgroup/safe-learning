@@ -47,6 +47,7 @@ reward_pessimism: 0.
 cost_pessimism: 0.
 model_propagation: all
 offline: false
+flip_uncertainty_constraint: false
 learn_from_scratch: false
 target_entropy: null
 pessimistic_q: false

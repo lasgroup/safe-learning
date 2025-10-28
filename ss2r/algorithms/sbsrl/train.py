@@ -218,6 +218,7 @@ def train(
     cost_pessimism: float = 0.0,
     model_propagation: str = "nominal",
     offline: bool = False,
+    flip_uncertainty_constraint: bool = False,
     learn_from_scratch: bool = False,
     target_entropy: float | None = None,
     pessimistic_q: bool = False,
@@ -518,6 +519,7 @@ def train(
         uncertainty_epsilon=uncertainty_epsilon,
         n_critics=n_critics,
         offline=offline,
+        flip_uncertainty_constraint=flip_uncertainty_constraint,
         target_entropy=target_entropy,
     )
     alpha_update = (

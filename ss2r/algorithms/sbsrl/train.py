@@ -359,7 +359,7 @@ def train(
     )
     num_model_rollouts = int(
         critic_grad_updates_per_step * sac_batch_size * model_to_real_data_ratio
-    )  # TODO: attention here: num_model_rollouts, sac_batch_size, critic_grad_updates_per_step, batch_size, model_grad_update_per_step cannot be chosen arbitrarily anymore?
+    )
     model_grad_updates_per_step = (
         int(
             (
@@ -371,6 +371,7 @@ def train(
         )
         + 1
     )
+    logging.info(f"Num model rollouts: {num_model_rollouts}")
     logging.info(f"Model grad updates per step: {model_grad_updates_per_step}")
     model_replay_buffer = replay_buffers.UniformSamplingQueue(
         max_replay_size=max_replay_size,

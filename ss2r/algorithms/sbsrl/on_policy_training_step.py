@@ -267,9 +267,6 @@ def make_on_policy_training_step(
             **cost_metrics,
             **aux,
         }
-        # Note that we store the qc of the backup also as the
-        # qc of behavior, this is so that later it
-        # will get save correctly to the checkpoint. #TODO: I changed this, ok?
         new_training_state = training_state.replace(  # type: ignore
             behavior_qr_optimizer_state=behavior_qr_optimizer_state,
             behavior_qr_params=behavior_qr_params,
@@ -513,7 +510,7 @@ def make_on_policy_training_step(
         num_real_transitions = int(
             num_model_rollouts
             * (1 - model_to_real_data_ratio)
-            / model_to_real_data_ratio  # TODO: see what I modified in train.py
+            / model_to_real_data_ratio
         )
         assert (
             num_real_transitions <= transitions.reward.shape[0]

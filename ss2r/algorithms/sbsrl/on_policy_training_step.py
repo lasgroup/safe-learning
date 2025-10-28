@@ -135,26 +135,20 @@ def make_on_policy_training_step(
         # reward critic update for each ensemble prediction
         _, *ens_keys_reward = jax.random.split(key_critic, ensemble_size + 1)
         ens_keys_reward = jnp.stack(ens_keys_reward)
-        reward_updater = lambda params, opt_state, trans_single, key_i: critic_update(
-            params,
+        critic_loss, behavior_qr_params, behavior_qr_optimizer_state = critic_update(
+            training_state.behavior_qr_params,
             training_state.behavior_policy_params,
             training_state.normalizer_params,
             training_state.behavior_target_qr_params,
             alpha,
-            trans_single,
-            key_i,
-            reward_q_transform,
-            optimizer_state=opt_state,
-            params=params,
-        )
-        behavior_qr_params, behavior_qr_optimizer_state, ensemble_losses = scan_update(
-            reward_updater,
-            training_state.behavior_qr_params,
-            training_state.behavior_qr_optimizer_state,
             trans_per_ens,
             ens_keys_reward,
+            reward_q_transform,
+            False,
+            False,
+            optimizer_state=training_state.behavior_qr_optimizer_state,
+            params=training_state.behavior_qr_params,
         )
-        critic_loss = jnp.mean(ensemble_losses)
 
         if safe or uncertainty_constraint:
             cost_metrics = {}
@@ -165,34 +159,25 @@ def make_on_policy_training_step(
                 key, key_cost = jax.random.split(key)
                 _, *ens_keys_cost = jax.random.split(key_cost, ensemble_size + 1)
                 ens_keys_cost = jnp.stack(ens_keys_cost)
-                cost_updater = (
-                    lambda params, opt_state, trans_single, key_i: cost_critic_update(
-                        params,
-                        training_state.behavior_policy_params,
-                        training_state.normalizer_params,
-                        training_state.behavior_target_qc_params,
-                        alpha,
-                        trans_single,
-                        key_i,
-                        cost_q_transform,
-                        safe,
-                        uncertainty_constraint,
-                        optimizer_state=opt_state,
-                        params=params,
-                    )
-                )
                 (
+                    cost_loss,
                     behavior_qc_params,
                     behavior_qc_optimizer_state,
-                    cost_losses,
-                ) = scan_update(
-                    cost_updater,
+                ) = cost_critic_update(
                     training_state.behavior_qc_params,
-                    training_state.behavior_qc_optimizer_state,
+                    training_state.behavior_policy_params,
+                    training_state.normalizer_params,
+                    training_state.behavior_target_qc_params,
+                    alpha,
                     trans_per_ens,
                     ens_keys_cost,
+                    cost_q_transform,
+                    safe,
+                    uncertainty_constraint,
+                    optimizer_state=training_state.behavior_qc_optimizer_state,
+                    params=training_state.behavior_qc_params,
                 )
-                cost_metrics["behavior_cost_critic_loss"] = jnp.mean(cost_losses)
+                cost_metrics["behavior_cost_critic_loss"] = cost_loss
             else:
                 behavior_qc_params = training_state.behavior_qc_params
                 behavior_qc_optimizer_state = training_state.behavior_qc_optimizer_state

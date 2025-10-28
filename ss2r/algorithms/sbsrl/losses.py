@@ -78,6 +78,36 @@ def make_losses(
         alpha_loss = jnp.mean(alpha_loss)
         return alpha_loss
 
+    def critic_loss_vmap(
+        q_params,
+        policy_params,
+        normalizer_params,
+        target_q_params,
+        alpha,
+        trans_per_ens,  # (ensemble, ...)
+        keys_per_ens,  # (ensemble, ...)
+        target_q_fn,
+        safe: bool = False,
+        uncertainty_constraint: bool = False,
+    ):
+        per_ens_losses = jax.vmap(
+            lambda trans, key: critic_loss(
+                q_params,
+                policy_params,
+                normalizer_params,
+                target_q_params,
+                alpha,
+                trans,
+                key,
+                target_q_fn,
+                safe,
+                uncertainty_constraint,
+            ),
+            in_axes=(0, 0),
+        )(trans_per_ens, keys_per_ens)
+
+        return jnp.mean(per_ens_losses)
+
     def critic_loss(
         q_params: Params,
         policy_params: Params,
@@ -287,4 +317,4 @@ def make_losses(
         total_loss = jnp.mean(total_loss)
         return total_loss
 
-    return alpha_loss, critic_loss, actor_loss, compute_model_loss
+    return alpha_loss, critic_loss_vmap, actor_loss, compute_model_loss

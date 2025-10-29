@@ -26,6 +26,7 @@ agent:
   model_grad_updates_per_step: 50
   num_model_rollouts: 50000
   offline: true
+  save_sooper_backup: true
   flip_uncertainty_constraint: false
   discounting: 0.95
   uncertainty_constraint: true

@@ -24,7 +24,7 @@ import jax.numpy as jnp
 from brax.training import distribution, networks, types
 from flax import linen
 
-from ss2r.algorithms.sac.networks import MLP, BroNet
+from ss2r.algorithms.sac.networks import MLP, BroNet, make_q_network
 
 ActivationFn = Callable[[jnp.ndarray], jnp.ndarray]
 Initializer = Callable[..., Any]
@@ -43,6 +43,7 @@ class NetworkFactory(Protocol[NetworkType]):
         n_critics: int = 2,
         n_heads: int = 1,
         safe: bool = False,
+        save_sooper_backup: bool = False,
         uncertainty_constraint: bool = False,
         use_bro: bool = True,
         ensemble_size: int = 10,
@@ -56,6 +57,7 @@ class SBSRLNetworks:
     policy_network: networks.FeedForwardNetwork
     qr_network: networks.FeedForwardNetwork
     qc_network: networks.FeedForwardNetwork | None
+    backup_qc_network: networks.FeedForwardNetwork | None
     model_network: networks.FeedForwardNetwork
     parametric_action_distribution: distribution.ParametricDistribution
 
@@ -207,6 +209,7 @@ def make_sbsrl_networks(
     n_heads: int = 1,
     safe: bool = False,
     uncertainty_constraint: bool = False,
+    save_sooper_backup: bool = False,
     ensemble_size: int = 10,
     embedding_dim: int = 4,
 ) -> SBSRLNetworks:
@@ -256,6 +259,24 @@ def make_sbsrl_networks(
         )
     else:
         qc_network = None
+    if save_sooper_backup:
+        backup_qc_network = make_q_network(
+            observation_size,
+            action_size,
+            preprocess_observations_fn=preprocess_observations_fn,
+            hidden_layer_sizes=value_hidden_layer_sizes,
+            activation=activation,
+            obs_key=value_obs_key,
+            use_bro=use_bro,
+            n_critics=n_critics,
+            n_heads=n_heads,
+        )
+        backup_old_apply = backup_qc_network.apply
+        backup_qc_network.apply = lambda *args, **kwargs: jnn.softplus(
+            backup_old_apply(*args, **kwargs)
+        )
+    else:
+        backup_qc_network = None
     model_network = make_world_model_ensemble(
         observation_size,
         action_size,
@@ -268,6 +289,7 @@ def make_sbsrl_networks(
         policy_network=policy_network,
         qr_network=qr_network,
         qc_network=qc_network,
+        backup_qc_network=backup_qc_network,
         model_network=model_network,
         parametric_action_distribution=parametric_action_distribution,
     )  # type: ignore

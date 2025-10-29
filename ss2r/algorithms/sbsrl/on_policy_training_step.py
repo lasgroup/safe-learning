@@ -1,5 +1,5 @@
 import functools
-from typing import Tuple
+from typing import Any, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -9,6 +9,7 @@ from brax.training import acting
 from brax.training.acme import running_statistics
 from brax.training.types import Policy, PRNGKey
 
+from ss2r.algorithms.sac.q_transforms import SACBase, SACCost
 from ss2r.algorithms.sac.types import (
     Metrics,
     ReplayBufferState,
@@ -29,6 +30,8 @@ def make_on_policy_training_step(
     alpha_update,
     critic_update,
     cost_critic_update,
+    backup_critic_update,
+    backup_cost_critic_update,
     model_update,
     actor_update,
     safe,
@@ -52,6 +55,7 @@ def make_on_policy_training_step(
     cost_pessimism,
     model_to_real_data_ratio,
     offline,
+    save_sooper_backup,
     ensemble_size,
     sac_batch_size,
     normalize_fn,
@@ -93,19 +97,22 @@ def make_on_policy_training_step(
         trans_per_ens = trans_per_ens._replace(extras=new_extras)
         return trans_per_ens
 
-    def scan_update(update_callable, init_params, init_opt_state, trans_per_ens, keys):
-        def _body(carry, elems):
-            params, opt_state = carry
-            trans_single, key_i = elems
-            loss_i, new_params, new_opt_state = update_callable(
-                params, opt_state, trans_single, key_i
-            )
-            return (new_params, new_opt_state), loss_i
+    def compress_transitions_ensemble(
+        transitions: Transition, ensemble_axis: int = 1
+    ) -> Transition:
+        def _reduce_leaf(x: Any, name: str):
+            if isinstance(x, dict):
+                return {k: _reduce_leaf(v, k) for k, v in x.items()}
+            x_arr = jnp.asarray(x)
+            if name in ("observation", "action"):
+                return x_arr
+            return jnp.mean(x_arr, axis=ensemble_axis)
 
-        (final_params, final_opt_state), losses = jax.lax.scan(
-            _body, (init_params, init_opt_state), (trans_per_ens, keys)
-        )
-        return final_params, final_opt_state, losses
+        replacements = {
+            f: _reduce_leaf(getattr(transitions, f), f) for f in transitions._fields
+        }
+        trans_compressed = transitions._replace(**replacements)
+        return trans_compressed
 
     def sgd_step(
         carry: Tuple[TrainingState, ReplayBufferState, PRNGKey, int],
@@ -149,11 +156,32 @@ def make_on_policy_training_step(
             optimizer_state=training_state.behavior_qr_optimizer_state,
             params=training_state.behavior_qr_params,
         )
+        if save_sooper_backup:
+            compressed_transitions = compress_transitions_ensemble(
+                transitions, ensemble_axis=1
+            )
+            (
+                backup_critic_loss,
+                backup_qr_params,
+                backup_qr_optimizer_state,
+            ) = backup_critic_update(
+                training_state.backup_qr_params,
+                training_state.behavior_policy_params,  # TODO: Is it correct to use a common policy for backup and behavior?
+                training_state.normalizer_params,
+                training_state.backup_target_qr_params,
+                alpha,
+                compressed_transitions,
+                key_critic,
+                SACBase(),
+                optimizer_state=training_state.backup_qr_optimizer_state,
+                params=training_state.backup_qr_params,
+            )
+        else:
+            backup_qr_params = training_state.backup_qr_params
+            backup_qr_optimizer_state = training_state.backup_qr_optimizer_state
 
         if safe or uncertainty_constraint:
             cost_metrics = {}
-            backup_qc_params = training_state.backup_qc_params
-            backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
             if penalizer is not None:
                 # cost critic update for each ensemble prediction
                 key, key_cost = jax.random.split(key)
@@ -181,6 +209,28 @@ def make_on_policy_training_step(
             else:
                 behavior_qc_params = training_state.behavior_qc_params
                 behavior_qc_optimizer_state = training_state.behavior_qc_optimizer_state
+            if save_sooper_backup:
+                (
+                    backup_cost_critic_loss,
+                    backup_qc_params,
+                    backup_qc_optimizer_state,
+                ) = backup_cost_critic_update(
+                    training_state.backup_qc_params,
+                    training_state.behavior_policy_params,
+                    training_state.normalizer_params,
+                    training_state.backup_target_qc_params,
+                    alpha,
+                    compressed_transitions,
+                    key_critic,
+                    SACCost(),
+                    True,
+                    optimizer_state=training_state.backup_qc_optimizer_state,
+                    params=training_state.backup_qc_params,
+                )
+                cost_metrics["backup_cost_critic_loss"] = backup_cost_critic_loss
+            else:
+                backup_qc_params = training_state.backup_qc_params
+                backup_qc_optimizer_state = training_state.backup_qc_optimizer_state
         else:
             cost_metrics = {}
             backup_qc_params = training_state.backup_qc_params
@@ -240,8 +290,18 @@ def make_on_policy_training_step(
             else:
                 new_behavior_target_qc_params = training_state.behavior_target_qc_params
         else:
-            new_backup_target_qc_params = training_state.backup_target_qc_params
             new_behavior_target_qc_params = training_state.behavior_target_qc_params
+
+        if save_sooper_backup:
+            new_backup_target_qr_params = polyak(
+                training_state.backup_target_qr_params, backup_qr_params
+            )
+            new_backup_target_qc_params = polyak(
+                training_state.backup_target_qc_params, backup_qc_params
+            )
+        else:
+            new_backup_target_qr_params = training_state.backup_target_qr_params
+            new_backup_target_qc_params = training_state.backup_target_qc_params
 
         metrics = {
             "actor_loss": actor_loss,
@@ -258,10 +318,12 @@ def make_on_policy_training_step(
             behavior_target_qr_params=new_behavior_target_qr_params,
             behavior_target_qc_params=new_behavior_target_qc_params,
             backup_qc_optimizer_state=backup_qc_optimizer_state,
+            backup_qr_optimizer_state=backup_qr_optimizer_state,
             backup_qc_params=backup_qc_params,
             behavior_qc_optimizer_state=behavior_qc_optimizer_state,
             behavior_qc_params=behavior_qc_params,
             backup_target_qc_params=new_backup_target_qc_params,
+            backup_target_qr_params=new_backup_target_qr_params,
             gradient_steps=training_state.gradient_steps + 1,
             behavior_policy_optimizer_state=policy_optimizer_state,
             behavior_policy_params=policy_params,

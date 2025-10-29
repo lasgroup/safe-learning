@@ -210,6 +210,7 @@ def train(
     advantage_threshold: float = 0.2,
     offline: bool = False,
     learn_from_scratch: bool = False,
+    load_from_sbsrl: bool = False,
     load_auxiliaries: bool = False,
     load_normalizer: bool = True,
     target_entropy: float | None = None,
@@ -374,6 +375,19 @@ def train(
                 backup_qc_params=params[4] if safe else None,
                 backup_target_qc_params=params[4] if safe else None,
             )
+        elif load_from_sbsrl:
+            training_state = training_state.replace(  # type: ignore
+                normalizer_params=ts_normalizer_params,
+                behavior_policy_params=params[1],
+                backup_policy_params=params[1],
+                behavior_qr_params=params[13],
+                behavior_target_qr_params=params[13],
+                backup_qr_params=params[13],
+                behavior_qc_params=params[14] if safe else None,
+                behavior_target_qc_params=params[14] if safe else None,
+                backup_qc_params=params[14] if safe else None,
+                backup_target_qc_params=params[14] if safe else None,
+            )
         else:
             training_state = training_state.replace(  # type: ignore
                 normalizer_params=ts_normalizer_params,
@@ -397,21 +411,38 @@ def train(
             alpha_optimizer_state = restore_state(
                 params[7], training_state.alpha_optimizer_state
             )
-            qr_optimizer_state = restore_state(
-                params[8][1]["inner_state"]
-                if isinstance(params[8][1], dict)
-                else params[8],
-                training_state.behavior_qr_optimizer_state,
-            )
-            if not safe:
-                qc_optimizer_state = None
-            else:
-                qc_optimizer_state = restore_state(
-                    params[9][1]["inner_state"]
-                    if isinstance(params[9][1], dict)
-                    else params[9],
-                    training_state.backup_qc_optimizer_state,
+            if not load_from_sbsrl:
+                qr_optimizer_state = restore_state(
+                    params[8][1]["inner_state"]
+                    if isinstance(params[8][1], dict)
+                    else params[8],
+                    training_state.behavior_qr_optimizer_state,
                 )
+                if not safe:
+                    qc_optimizer_state = None
+                else:
+                    qc_optimizer_state = restore_state(
+                        params[9][1]["inner_state"]
+                        if isinstance(params[9][1], dict)
+                        else params[9],
+                        training_state.backup_qc_optimizer_state,
+                    )
+            else:
+                qr_optimizer_state = restore_state(
+                    params[15][1]["inner_state"]
+                    if isinstance(params[15][1], dict)
+                    else params[15],
+                    training_state.behavior_qr_optimizer_state,
+                )
+                if not safe:
+                    qc_optimizer_state = None
+                else:
+                    qc_optimizer_state = restore_state(
+                        params[16][1]["inner_state"]
+                        if isinstance(params[16][1], dict)
+                        else params[16],
+                        training_state.backup_qc_optimizer_state,
+                    )
             training_state = training_state.replace(  # type: ignore
                 behavior_policy_optimizer_state=policy_optimizer_state,
                 alpha_optimizer_state=alpha_optimizer_state,

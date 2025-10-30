@@ -484,7 +484,7 @@ def train(
                     params[9][1]["inner_state"]
                     if isinstance(params[9][1], dict)
                     else params[9],
-                    training_state.backup_qc_optimizer_state,
+                    training_state.behavior_qc_optimizer_state,
                 )
             training_state = training_state.replace(  # type: ignore
                 normalizer_params=ts_normalizer_params,

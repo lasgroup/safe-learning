@@ -554,19 +554,7 @@ def make_on_policy_training_step(
             training_state, planning_env, policy, sac_buffer_state, training_key
         )
         # Add some real transitions
-        num_real_transitions = int(
-            num_model_rollouts
-            * (1 - model_to_real_data_ratio)
-            / model_to_real_data_ratio
-        )
-        assert (
-            num_real_transitions <= transitions.reward.shape[0]
-        ), "More model minibatches than real minibatches"
-        if num_real_transitions >= 1:
-            transitions = jax.tree_util.tree_map(
-                lambda x: x[:num_real_transitions],
-                transitions,
-            )
+        if model_to_real_data_ratio < 1:
             training_state, transitions = relabel_real_transitions(
                 training_state, planning_env, transitions
             )

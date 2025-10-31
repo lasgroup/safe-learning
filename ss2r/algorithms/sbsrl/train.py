@@ -108,20 +108,19 @@ def _init_training_state(
     model_params = init_model_ensemble(model_keys)
     model_optimizer_state = model_optimizer.init(model_params)
     if sbsrl_network.qc_network is not None:
-        behavior_qc_params = sbsrl_network.qc_network.init(
-            key_qr
-        )  # TODO: do I need to split another key?
+        behavior_qc_params = sbsrl_network.qc_network.init(key_qr)
         assert qc_optimizer is not None
         behavior_qc_optimizer_state = qc_optimizer.init(behavior_qc_params)
     else:
         behavior_qc_params = None
         behavior_qc_optimizer_state = None
-    if sbsrl_network.backup_qc_network is not None:
+    if (
+        sbsrl_network.backup_qc_network is not None
+        and sbsrl_network.backup_qr_network is not None
+    ):
         backup_qc_params = sbsrl_network.backup_qc_network.init(key_qr)
-        backup_qr_params = sbsrl_network.backup_qc_network.init(
-            key_qr
-        )  # TODO: can I use the same network for backup_qc/backup_qr?
-        assert qc_optimizer is not None
+        backup_qr_params = sbsrl_network.backup_qr_network.init(key_qr)
+        assert qc_optimizer is not None and qr_optimizer is not None
         backup_qc_optimizer_state = qc_optimizer.init(backup_qc_params)
         backup_qr_optimizer_state = qr_optimizer.init(backup_qr_params)
     else:
@@ -491,9 +490,7 @@ def train(
                 normalizer_params=ts_normalizer_params,
                 disagreement_normalizer_params=ts_disagreement_normalizer_params,
                 behavior_policy_params=params[1],
-                backup_policy_params=params[
-                    1
-                ],  # TODO: can remove backup_policy_params?
+                backup_policy_params=params[1],
                 behavior_qr_params=params[3],
                 behavior_target_qr_params=params[3],
                 backup_qr_params=params[3],
@@ -579,9 +576,7 @@ def train(
         backup_critic_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
             backup_critic_loss, qr_optimizer, pmap_axis_name=None
         )
-        if (
-            safe or uncertainty_constraint
-        ):  # TODO: have to import critic_loss also from MBPO
+        if safe or uncertainty_constraint:
             backup_cost_critic_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
                 backup_critic_loss, qc_optimizer, pmap_axis_name=None
             )

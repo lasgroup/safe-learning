@@ -58,6 +58,7 @@ def make_losses(
     policy_network = sbsrl_network.policy_network
     qr_network = sbsrl_network.qr_network
     qc_network = sbsrl_network.qc_network
+    backup_qr_network = sbsrl_network.backup_qr_network
     backup_qc_network = sbsrl_network.backup_qc_network
     parametric_action_distribution = sbsrl_network.parametric_action_distribution
 
@@ -336,7 +337,7 @@ def make_losses(
             jnp.ndarray,
         ]
     ] = None
-    if backup_qc_network is not None:
+    if backup_qc_network is not None and backup_qr_network is not None:
 
         def backup_critic_loss(
             q_params: Params,
@@ -349,11 +350,16 @@ def make_losses(
             target_q_fn: QTransformationSAC,
             safe: bool = False,
         ) -> jnp.ndarray:
-            assert backup_qc_network is not None
+            q_network = (
+                backup_qc_network
+                if safe or uncertainty_constraint
+                else backup_qr_network
+            )
+            assert q_network is not None
             action = transitions.action
             scale = cost_scaling if safe else reward_scaling
             gamma = safety_discounting if safe else discounting
-            q_old_action = backup_qc_network.apply(
+            q_old_action = q_network.apply(
                 normalizer_params, q_params, transitions.observation, action
             )
             key, another_key = jax.random.split(key)
@@ -371,7 +377,7 @@ def make_losses(
                 next_action = parametric_action_distribution.postprocess(next_action)
                 return next_action, next_log_prob
 
-            q_fn = lambda obs, action: backup_qc_network.apply(
+            q_fn = lambda obs, action: q_network.apply(
                 normalizer_params, target_q_params, obs, action
             )
             target_q = target_q_fn(

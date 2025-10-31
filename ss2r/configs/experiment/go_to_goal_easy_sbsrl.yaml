@@ -14,7 +14,7 @@ training:
   action_repeat: 4
   num_envs: 20
   num_evals: 15
-  wandb_id: 9dbmh3o6
+  wandb_id: ktqmecse
 
 agent:
   policy_hidden_layer_sizes: [256, 256, 256]

@@ -387,6 +387,13 @@ def train(
                 behavior_target_qc_params=params[14] if safe else None,
                 backup_qc_params=params[14] if safe else None,
                 backup_target_qc_params=params[14] if safe else None,
+                model_params=params[10],
+                model_optimizer_state=restore_state(
+                    params[11][1]["inner_state"]
+                    if isinstance(params[11][1], dict)
+                    else params[11],
+                    training_state.model_optimizer_state,
+                ),
             )
         else:
             training_state = training_state.replace(  # type: ignore

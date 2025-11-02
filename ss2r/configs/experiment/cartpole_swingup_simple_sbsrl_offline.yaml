@@ -1,6 +1,5 @@
 # @package _global_
 defaults:
-  - mujoco_playground_dm_control
   - override /environment: cartpole_swingup
   - override /agent: sbsrl
   - override /agent/penalizer: multi_lagrangian

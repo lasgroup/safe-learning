@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - mujoco_playground_dm_control_mbpo
+  #- mujoco_playground_dm_control_mbpo
   - override /environment: cartpole_swingup
   - override /agent: sbsrl
   - override /agent/penalizer: multi_lagrangian
@@ -14,8 +14,9 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: false
   safety_budget: 100
-  num_envs: 20
-  num_evals: 15
+  num_envs: 128
+  num_evals: 20
+  num_eval_envs: 128
   wandb_id: k8rrbgc7
 
 agent:

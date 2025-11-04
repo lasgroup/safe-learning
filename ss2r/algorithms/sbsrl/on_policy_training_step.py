@@ -401,25 +401,28 @@ def make_on_policy_training_step(
             key_generate_unroll,
             extra_fields=extra_fields_model,
         )
-        disagreement = jnp.expand_dims(
-            transitions.extras["state_extras"]["disagreement"], axis=1
-        )  # (B,1)
-        new_disagreement_normalizer_params = running_statistics.update(
-            training_state.disagreement_normalizer_params, disagreement
-        )
-        training_state = training_state.replace(  # type: ignore
-            disagreement_normalizer_params=new_disagreement_normalizer_params
-        )
-        disagreement = normalize_fn(
-            disagreement, training_state.disagreement_normalizer_params
-        )
-        transitions.extras["state_extras"]["disagreement"] = jnp.full(
-            transitions.reward.shape, disagreement
-        )  # (B,ensemble_size)
+        disagreement_metrics = {}
+        if uncertainty_constraint:
+            disagreement = jnp.expand_dims(
+                transitions.extras["state_extras"]["disagreement"], axis=1
+            )  # (B,1)
+            new_disagreement_normalizer_params = running_statistics.update(
+                training_state.disagreement_normalizer_params, disagreement
+            )
+            training_state = training_state.replace(  # type: ignore
+                disagreement_normalizer_params=new_disagreement_normalizer_params
+            )
+            disagreement = normalize_fn(
+                disagreement, training_state.disagreement_normalizer_params
+            )
+            transitions.extras["state_extras"]["disagreement"] = jnp.full(
+                transitions.reward.shape, disagreement
+            )  # (B,ensemble_size)
+            disagreement_metrics = {"normalized_disagreement": disagreement.mean()}
         sac_replay_buffer_state = sac_replay_buffer.insert(
             sac_replay_buffer_state, float16(transitions)
         )
-        disagreement_metrics = {"normalized_disagreement": disagreement.mean()}
+
         return training_state, sac_replay_buffer_state, disagreement_metrics
 
     def relabel_real_transitions(
@@ -427,28 +430,35 @@ def make_on_policy_training_step(
         planning_env: ModelBasedEnv,
         transitions: Transition,
     ):
-        pred_fn = planning_env.model_network.apply
-        model_params = planning_env.model_params
-        normalizer_params = planning_env.normalizer_params
-        vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
-        next_obs_pred, *_ = vmap_pred_fn(
-            normalizer_params, model_params, transitions.observation, transitions.action
-        )
-        disagreement = (
-            next_obs_pred.std(axis=0).mean(-1)
-            if isinstance(next_obs_pred, jax.Array)
-            else next_obs_pred["state"].std(axis=0).mean(-1)
-        )  # (B,)
-        disagreement = jnp.expand_dims(disagreement, axis=1)  # (B, 1)
-        new_disagreement_normalizer_params = running_statistics.update(
-            training_state.disagreement_normalizer_params, disagreement
-        )
-        training_state = training_state.replace(  # type: ignore
-            disagreement_normalizer_params=new_disagreement_normalizer_params
-        )
-        disagreement = normalize_fn(
-            disagreement, training_state.disagreement_normalizer_params
-        )
+        if uncertainty_constraint:
+            pred_fn = planning_env.model_network.apply
+            model_params = planning_env.model_params
+            normalizer_params = planning_env.normalizer_params
+            vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
+            next_obs_pred, *_ = vmap_pred_fn(
+                normalizer_params,
+                model_params,
+                transitions.observation,
+                transitions.action,
+            )
+            disagreement = (
+                next_obs_pred.std(axis=0).mean(-1)
+                if isinstance(next_obs_pred, jax.Array)
+                else next_obs_pred["state"].std(axis=0).mean(-1)
+            )  # (B,)
+            disagreement = jnp.expand_dims(disagreement, axis=1)  # (B, 1)
+            new_disagreement_normalizer_params = running_statistics.update(
+                training_state.disagreement_normalizer_params, disagreement
+            )
+            training_state = training_state.replace(  # type: ignore
+                disagreement_normalizer_params=new_disagreement_normalizer_params
+            )
+            disagreement = normalize_fn(
+                disagreement, training_state.disagreement_normalizer_params
+            )
+            transitions.extras["state_extras"]["disagreement"] = jnp.tile(
+                disagreement, (1, ensemble_size)
+            )
 
         new_reward = jnp.tile(transitions.reward[:, None], (1, ensemble_size))
         new_discount = jnp.tile(transitions.discount[:, None], (1, ensemble_size))
@@ -458,9 +468,6 @@ def make_on_policy_training_step(
         transitions.extras["state_extras"]["truncation"] = jnp.tile(
             transitions.extras["state_extras"]["truncation"][:, None],
             (1, ensemble_size),
-        )
-        transitions.extras["state_extras"]["disagreement"] = jnp.tile(
-            disagreement, (1, ensemble_size)
         )
         if safe:
             transitions.extras["state_extras"]["cost"] = jnp.tile(

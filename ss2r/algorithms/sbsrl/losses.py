@@ -250,7 +250,7 @@ def make_losses(
             )  # -> (E, B, n_critics, head_size)
             constraints_list = []
             if safe:
-                q_c = qc_action[:, :, :, 0]
+                q_c = qc_action[:, :, :, 0] / cost_scaling
                 mean_qc = jnp.mean(q_c, axis=(1, 2))
                 qc_constr = mean_qc
                 if use_mean_critic:
@@ -263,7 +263,7 @@ def make_losses(
                 aux["q_cost"] = mean_qc.mean()
                 aux["qc_std"] = jnp.std(mean_qc)
             if uncertainty_constraint:
-                q_sigma = qc_action[:, :, :, -1]
+                q_sigma = qc_action[:, :, :, -1] / sigma_scaling
                 sigma_constraint = q_sigma.mean() - uncertainty_epsilon
                 if offline and flip_uncertainty_constraint:
                     sigma_constraint = -sigma_constraint

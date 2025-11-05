@@ -243,11 +243,13 @@ def train(
             "No training will happen because min_replay_size >= num_timesteps"
         )
     episodic_safety_budget = safety_budget
-    budget_scaling_fn = lambda x: x
     if safety_discounting != 1.0 and normalize_budget:
-        budget_scaling_fn = (
-            lambda x: x * episode_length * (1.0 - safety_discounting) / action_repeat
+        safety_budget = (
+            (safety_budget / episode_length)
+            / (1.0 - safety_discounting)
+            * action_repeat
         )
+    budget_scaling_fn = lambda x: x  # TODO:remove this
     logging.info(f"Episode safety budget: {budget_scaling_fn(safety_budget)}")
     if max_replay_size is None:
         max_replay_size = num_timesteps

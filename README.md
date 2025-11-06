@@ -30,7 +30,7 @@ pip install -e .
 Install uv if it is not already available:
 
 ```bash
-pip install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 Create a project environment and install dependencies:

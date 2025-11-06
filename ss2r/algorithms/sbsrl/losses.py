@@ -17,7 +17,7 @@
 See: https://arxiv.org/abs/1906.08253
 """
 
-from typing import Any, TypeAlias
+from typing import Any, Callable, Optional, TypeAlias
 
 import jax
 import jax.numpy as jnp
@@ -26,6 +26,7 @@ from brax.training import types
 from brax.training.types import Params, PRNGKey
 
 from ss2r.algorithms.penalizers import Penalizer
+from ss2r.algorithms.sac.q_transforms import QTransformation as QTransformationSAC
 from ss2r.algorithms.sbsrl.networks import SBSRLNetworks
 from ss2r.algorithms.sbsrl.q_transforms import QTransformation
 
@@ -44,17 +45,21 @@ def make_losses(
     normalize_fn,
     ensemble_size,
     safe,
+    save_sooper_backup,
     use_mean_critic,
     uncertainty_constraint,
     uncertainty_epsilon,
     n_critics,
     offline,
+    flip_uncertainty_constraint,
     target_entropy: float | None = None,
 ):
     target_entropy = -0.5 * action_size if target_entropy is None else target_entropy
     policy_network = sbsrl_network.policy_network
     qr_network = sbsrl_network.qr_network
     qc_network = sbsrl_network.qc_network
+    backup_qr_network = sbsrl_network.backup_qr_network
+    backup_qc_network = sbsrl_network.backup_qc_network
     parametric_action_distribution = sbsrl_network.parametric_action_distribution
 
     def alpha_loss(
@@ -76,6 +81,36 @@ def make_losses(
         alpha_loss = alpha * jax.lax.stop_gradient(-log_prob - target_entropy)
         alpha_loss = jnp.mean(alpha_loss)
         return alpha_loss
+
+    def critic_loss_vmap(
+        q_params,
+        policy_params,
+        normalizer_params,
+        target_q_params,
+        alpha,
+        trans_per_ens,  # (ensemble, ...)
+        keys_per_ens,  # (ensemble, ...)
+        target_q_fn,
+        safe: bool = False,
+        uncertainty_constraint: bool = False,
+    ):
+        per_ens_losses = jax.vmap(
+            lambda trans, key: critic_loss(
+                q_params,
+                policy_params,
+                normalizer_params,
+                target_q_params,
+                alpha,
+                trans,
+                key,
+                target_q_fn,
+                safe,
+                uncertainty_constraint,
+            ),
+            in_axes=(0, 0),
+        )(trans_per_ens, keys_per_ens)
+
+        return jnp.mean(per_ens_losses)
 
     def critic_loss(
         q_params: Params,
@@ -230,7 +265,7 @@ def make_losses(
             if uncertainty_constraint:
                 q_sigma = qc_action[:, :, :, -1]
                 sigma_constraint = q_sigma.mean() - uncertainty_epsilon
-                if offline:
+                if offline and flip_uncertainty_constraint:
                     sigma_constraint = -sigma_constraint
                 constraints_list.append(sigma_constraint)
                 aux["q_sigma"] = q_sigma.mean()
@@ -286,4 +321,85 @@ def make_losses(
         total_loss = jnp.mean(total_loss)
         return total_loss
 
-    return alpha_loss, critic_loss, actor_loss, compute_model_loss
+    backup_critic_loss: Optional[
+        Callable[
+            [
+                Params,
+                Params,
+                Any,
+                Params,
+                jnp.ndarray,
+                Transition,
+                PRNGKey,
+                QTransformationSAC,
+                bool,
+            ],
+            jnp.ndarray,
+        ]
+    ] = None
+    if backup_qc_network is not None and backup_qr_network is not None:
+
+        def backup_critic_loss(
+            q_params: Params,
+            policy_params: Params,
+            normalizer_params: Any,
+            target_q_params: Params,
+            alpha: jnp.ndarray,
+            transitions: Transition,
+            key: PRNGKey,
+            target_q_fn: QTransformationSAC,
+            safe: bool = False,
+        ) -> jnp.ndarray:
+            q_network = (
+                backup_qc_network
+                if safe or uncertainty_constraint
+                else backup_qr_network
+            )
+            assert q_network is not None
+            action = transitions.action
+            scale = cost_scaling if safe else reward_scaling
+            gamma = safety_discounting if safe else discounting
+            q_old_action = q_network.apply(
+                normalizer_params, q_params, transitions.observation, action
+            )
+            key, another_key = jax.random.split(key)
+
+            def policy(obs: jax.Array) -> tuple[jax.Array, jax.Array]:
+                next_dist_params = policy_network.apply(
+                    normalizer_params, policy_params, obs
+                )
+                next_action = parametric_action_distribution.sample_no_postprocessing(
+                    next_dist_params, key
+                )
+                next_log_prob = parametric_action_distribution.log_prob(
+                    next_dist_params, next_action
+                )
+                next_action = parametric_action_distribution.postprocess(next_action)
+                return next_action, next_log_prob
+
+            q_fn = lambda obs, action: q_network.apply(
+                normalizer_params, target_q_params, obs, action
+            )
+            target_q = target_q_fn(
+                transitions,
+                q_fn,
+                policy,
+                gamma,
+                alpha,
+                scale,
+                another_key,
+            )
+            q_error = q_old_action - jnp.expand_dims(target_q, -1)
+            # Better bootstrapping for truncated episodes.
+            truncation = transitions.extras["state_extras"]["truncation"]
+            q_error *= jnp.expand_dims(1 - truncation, -1)
+            q_loss = 0.5 * jnp.mean(jnp.square(q_error))
+            return q_loss
+
+    return (
+        alpha_loss,
+        critic_loss_vmap,
+        actor_loss,
+        compute_model_loss,
+        backup_critic_loss,
+    )

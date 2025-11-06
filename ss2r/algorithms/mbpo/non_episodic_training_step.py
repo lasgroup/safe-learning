@@ -33,6 +33,7 @@ def make_non_episodic_training_step(
     num_critic_updates_per_actor_update,
     safety_budget,
     qc_netwrok,
+    override_actions,
 ) -> TrainingStepFn:
     def sgd_step(
         carry: Tuple[TrainingState, ReplayBufferState, PRNGKey, int], unused_t
@@ -41,11 +42,16 @@ def make_non_episodic_training_step(
         key, key_alpha, key_critic, key_actor = jax.random.split(key, 4)
         new_buffer_state, transitions = sac_replay_buffer.sample(sac_buffer_state)
         transitions = float32(transitions)
+        if override_actions:
+            behavior_action = transitions.extras["policy_extras"]["behavior_action"]
+            actor_critic_transitions = transitions._replace(action=behavior_action)
+        else:
+            actor_critic_transitions = transitions
         alpha_loss, alpha_params, alpha_optimizer_state = alpha_update(
             training_state.alpha_params,
             training_state.behavior_policy_params,
             training_state.normalizer_params,
-            transitions,
+            actor_critic_transitions,
             key_alpha,
             optimizer_state=training_state.alpha_optimizer_state,
         )
@@ -56,7 +62,7 @@ def make_non_episodic_training_step(
             training_state.normalizer_params,
             training_state.behavior_target_qr_params,
             alpha,
-            transitions,
+            actor_critic_transitions,
             key_critic,
             reward_q_transform,
             optimizer_state=training_state.behavior_qr_optimizer_state,
@@ -108,7 +114,7 @@ def make_non_episodic_training_step(
             training_state.behavior_qr_params,
             training_state.behavior_qc_params,
             alpha,
-            transitions,
+            actor_critic_transitions,
             key_actor,
             safety_budget,
             None,

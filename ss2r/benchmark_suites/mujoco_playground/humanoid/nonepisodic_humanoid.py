@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jp
 import mujoco
 from ml_collections import config_dict
+from mujoco import mjx
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src.dm_control_suite import humanoid
 
@@ -21,7 +22,7 @@ def default_config() -> config_dict.ConfigDict:
         episode_length=1000,
         action_repeat=1,
         vision=False,
-        ground_start_probability=1.0,
+        ground_start_probability=0.0,
     )
 
 
@@ -31,13 +32,36 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
     def __init__(
         self,
         move_speed: float = 0.0,
-        config: config_dict.ConfigDict = humanoid.default_config(),
+        config: config_dict.ConfigDict = default_config(),
         config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
     ):
         super().__init__(
             move_speed=move_speed, config=config, config_overrides=config_overrides
         )
+
+        self._xml_path = humanoid._XML_PATH.as_posix()
+        mj_spec = mujoco.MjSpec.from_file(
+            filename=str(humanoid._XML_PATH), assets=humanoid.common.get_assets()
+        )
+        self._mj_model = self._modify_model(mj_spec)
+        self._mjx_model = mjx.put_model(self._mj_model)
         self.ground_start_probability = config.ground_start_probability
+        self._post_init()
+
+    def _modify_model(self, mj_spec: mujoco.MjSpec) -> mujoco.MjModel:
+        mj_spec.add_sensor(
+            type=mujoco.mjtSensor.mjSENS_TOUCH,
+            name="head_touch",
+            objtype=mujoco.mjtObj.mjOBJ_SITE,
+            objname="head",
+        )
+        mj_spec.add_sensor(
+            type=mujoco.mjtSensor.mjSENS_TOUCH,
+            name="torso_touch",
+            objtype=mujoco.mjtObj.mjOBJ_SITE,
+            objname="torso",
+        )
+        return mj_spec.compile()
 
     def _post_init(self):
         super()._post_init()
@@ -125,6 +149,7 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
             "reward/stand": jp.zeros(()),
             "reward/small_control": jp.zeros(()),
             "reward/move": jp.zeros(()),
+            "reward/on_ground": jp.zeros(()),
         }
         obs = self._get_obs(data, info)
         reward, done = jp.zeros(2)
@@ -132,9 +157,27 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
 
     def step(self, state: mjx_env.State, action: jax.Array) -> mjx_env.State:
         outs = super().step(state, action)
-        standing = self._head_height(outs.data) > humanoid._STAND_HEIGHT
-        upright = self._torso_upright(outs.data) > 0.9
+        head_height = self._head_height(outs.data)
+        standing = head_height > humanoid._STAND_HEIGHT
+        torso_height = self._torso_upright(outs.data)
+        upright = torso_height > 0.9
         outs.info["cost"] = jp.where(
             standing | upright, jp.zeros_like(outs.reward), jp.ones_like(outs.reward)
         )
+        on_ground = (head_height < 0.1) | (torso_height < 0.1)
+        outs.metrics["reward/on_ground"] = on_ground.astype(jp.float32)
+        torso_force = (
+            jp.linalg.norm(
+                mjx_env.get_sensor_data(self.mj_model, state.data, "torso_touch")
+            )
+            > 1000.0
+        )
+        head_force = (
+            jp.linalg.norm(
+                mjx_env.get_sensor_data(self.mj_model, state.data, "head_touch")
+            )
+            > 1000.0
+        )
+        done = on_ground & (torso_force | head_force)
+        outs = outs.replace(done=done.astype(jp.float32))
         return outs

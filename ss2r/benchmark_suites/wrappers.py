@@ -153,12 +153,16 @@ class NonEpisodicWrapper(Wrapper):
         state.info["average_reward"] = jp.zeros(rng.shape[:-1])
         metrics = {
             "average_reward": state.info["average_reward"],
+            "alive": jp.ones_like(state.done),
+            "total_steps": state.info["steps"],
         }
         state.info["truncation"] = jp.zeros(rng.shape[:-1])
         state.metrics.update(metrics)
         return state
 
     def step(self, state: State, action: jax.Array) -> State:
+        dead = state.done.astype(jp.bool) | state.info["truncation"].astype(jp.bool)
+
         def f(state, _):
             nstate = self.env.step(state, action)
             maybe_cost = nstate.info.get("cost", None)
@@ -168,13 +172,19 @@ class NonEpisodicWrapper(Wrapper):
         state, (rewards, maybe_costs, maybe_eval_rewards) = jax.lax.scan(
             f, state, (), self.action_repeat
         )
-        sum_rewards = jp.sum(rewards, axis=0)
-        state = state.replace(reward=sum_rewards, done=jp.zeros_like(state.done))
+        sum_rewards = jp.sum(rewards, axis=0) * (1.0 - dead.astype(jp.float32))
+        state = state.replace(reward=sum_rewards)
         if maybe_costs is not None:
-            state.info["cost"] = jp.sum(maybe_costs, axis=0)
+            state.info["cost"] = jp.sum(maybe_costs, axis=0) * (
+                1.0 - dead.astype(jp.float32)
+            )
         if maybe_eval_rewards is not None:
-            state.info["eval_reward"] = jp.sum(maybe_eval_rewards, axis=0)
-        steps = state.info["steps"] + self.action_repeat
+            state.info["eval_reward"] = jp.sum(maybe_eval_rewards, axis=0) * (
+                1.0 - dead
+            )
+        steps = state.info["steps"] + self.action_repeat * (
+            1.0 - dead.astype(jp.float32)
+        )
         sum_rewards /= self.action_repeat
         average_reward = (
             state.info["average_reward"]
@@ -183,6 +193,10 @@ class NonEpisodicWrapper(Wrapper):
         state.info["steps"] = steps
         state.info["average_reward"] = average_reward
         state.metrics["average_reward"] = average_reward
+        # Ignore everything that happens after the first done
+        state.info["truncation"] = dead.astype(jp.float32)
+        state.metrics["alive"] = 1.0 - dead.astype(jp.float32)
+        state.metrics["total_steps"] = steps
         return state
 
 

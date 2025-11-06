@@ -108,14 +108,26 @@ def _init_training_state(
     model_params = init_model_ensemble(model_keys)
     model_optimizer_state = model_optimizer.init(model_params)
     if sbsrl_network.qc_network is not None:
-        backup_qc_params = sbsrl_network.qc_network.init(key_qr)
+        behavior_qc_params = sbsrl_network.qc_network.init(key_qr)
         assert qc_optimizer is not None
+        behavior_qc_optimizer_state = qc_optimizer.init(behavior_qc_params)
+    else:
+        behavior_qc_params = None
+        behavior_qc_optimizer_state = None
+    if (
+        sbsrl_network.backup_qc_network is not None
+        and sbsrl_network.backup_qr_network is not None
+    ):
+        backup_qc_params = sbsrl_network.backup_qc_network.init(key_qr)
+        backup_qr_params = sbsrl_network.backup_qr_network.init(key_qr)
+        assert qc_optimizer is not None and qr_optimizer is not None
         backup_qc_optimizer_state = qc_optimizer.init(backup_qc_params)
-        backup_qr_params = qr_params
+        backup_qr_optimizer_state = qr_optimizer.init(backup_qr_params)
     else:
         backup_qc_params = None
         backup_qc_optimizer_state = None
         backup_qr_params = None
+        backup_qr_optimizer_state = None
     if isinstance(obs_size, Mapping):
         obs_shape = {
             k: specs.Array(v, jnp.dtype("float32")) for k, v in obs_size.items()
@@ -132,13 +144,15 @@ def _init_training_state(
         behavior_qr_optimizer_state=qr_optimizer_state,
         behavior_qr_params=qr_params,
         backup_qr_params=backup_qr_params,
-        behavior_qc_optimizer_state=backup_qc_optimizer_state,
-        behavior_qc_params=backup_qc_params,
+        behavior_qc_optimizer_state=behavior_qc_optimizer_state,
+        behavior_qc_params=behavior_qc_params,
         behavior_target_qr_params=qr_params,
-        behavior_target_qc_params=backup_qc_params,
+        behavior_target_qc_params=behavior_qc_params,
         backup_qc_params=backup_qc_params,
         backup_qc_optimizer_state=backup_qc_optimizer_state,
+        backup_qr_optimizer_state=backup_qr_optimizer_state,
         backup_target_qc_params=backup_qc_params,
+        backup_target_qr_params=backup_qr_params,
         model_params=model_params,
         model_optimizer_state=model_optimizer_state,
         gradient_steps=jnp.zeros(()),
@@ -202,6 +216,7 @@ def train(
     restore_checkpoint_path: Optional[str] = None,
     eval_env: Optional[envs.Env] = None,
     safe: bool = False,
+    save_sooper_backup: bool = False,
     use_mean_critic: bool = False,
     uncertainty_constraint: bool = False,
     uncertainty_epsilon: float = 0.0,
@@ -218,6 +233,7 @@ def train(
     cost_pessimism: float = 0.0,
     model_propagation: str = "nominal",
     offline: bool = False,
+    flip_uncertainty_constraint: bool = False,
     learn_from_scratch: bool = False,
     target_entropy: float | None = None,
     pessimistic_q: bool = False,
@@ -300,6 +316,7 @@ def train(
         preprocess_observations_fn=normalize_fn,
         safe=safe,
         uncertainty_constraint=uncertainty_constraint,
+        save_sooper_backup=save_sooper_backup,
         use_bro=use_bro,
         n_critics=n_critics,
         n_heads=n_heads,
@@ -357,20 +374,22 @@ def train(
     local_key, model_rb_key, actor_critic_rb_key, env_key, eval_key = jax.random.split(
         local_key, 5
     )
-    num_model_rollouts = int(
-        critic_grad_updates_per_step * sac_batch_size * model_to_real_data_ratio
-    )  # TODO: attention here: num_model_rollouts, sac_batch_size, critic_grad_updates_per_step, batch_size, model_grad_update_per_step cannot be chosen arbitrarily anymore?
-    model_grad_updates_per_step = (
+    model_grad_updates_per_step = max(
+        model_grad_updates_per_step,
         int(
-            (
-                num_model_rollouts
-                * (1 - model_to_real_data_ratio)
-                / model_to_real_data_ratio
-            )
+            critic_grad_updates_per_step
+            * sac_batch_size
+            * (1 - model_to_real_data_ratio)
             / batch_size
-        )
-        + 1
+        ),
     )
+    num_model_rollouts = int(
+        model_grad_updates_per_step
+        * batch_size
+        * model_to_real_data_ratio
+        / (1 - model_to_real_data_ratio)
+    )
+    logging.info(f"Num model rollouts: {num_model_rollouts}")
     logging.info(f"Model grad updates per step: {model_grad_updates_per_step}")
     model_replay_buffer = replay_buffers.UniformSamplingQueue(
         max_replay_size=max_replay_size,
@@ -465,7 +484,7 @@ def train(
                     params[9][1]["inner_state"]
                     if isinstance(params[9][1], dict)
                     else params[9],
-                    training_state.backup_qc_optimizer_state,
+                    training_state.behavior_qc_optimizer_state,
                 )
             training_state = training_state.replace(  # type: ignore
                 normalizer_params=ts_normalizer_params,
@@ -500,7 +519,13 @@ def train(
                 alpha_params=params[5],
             )
     make_policy = sbsrl_networks.make_inference_fn(sbsrl_network)
-    alpha_loss, critic_loss, actor_loss, model_loss = sbsrl_losses.make_losses(
+    (
+        alpha_loss,
+        critic_loss,
+        actor_loss,
+        model_loss,
+        backup_critic_loss,
+    ) = sbsrl_losses.make_losses(
         sbsrl_network=sbsrl_network,
         reward_scaling=reward_scaling,
         cost_scaling=cost_scaling,
@@ -512,11 +537,13 @@ def train(
         normalize_fn=normalize_fn,
         ensemble_size=model_ensemble_size,
         safe=safe,
+        save_sooper_backup=save_sooper_backup,
         use_mean_critic=use_mean_critic,
         uncertainty_constraint=uncertainty_constraint,
         uncertainty_epsilon=uncertainty_epsilon,
         n_critics=n_critics,
         offline=offline,
+        flip_uncertainty_constraint=flip_uncertainty_constraint,
         target_entropy=target_entropy,
     )
     alpha_update = (
@@ -545,6 +572,20 @@ def train(
             actor_loss, policy_optimizer, pmap_axis_name=None, has_aux=True
         )
     )
+    if save_sooper_backup:
+        backup_critic_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
+            backup_critic_loss, qr_optimizer, pmap_axis_name=None
+        )
+        if safe or uncertainty_constraint:
+            backup_cost_critic_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
+                backup_critic_loss, qc_optimizer, pmap_axis_name=None
+            )
+        else:
+            backup_cost_critic_update = None
+    else:
+        backup_critic_update = None
+        backup_cost_critic_update = None
+
     extra_fields = ("truncation",)
     if safe:
         extra_fields += ("cost",)  # type: ignore
@@ -571,6 +612,8 @@ def train(
         alpha_update,
         critic_update,
         cost_critic_update,
+        backup_critic_update,
+        backup_cost_critic_update,
         model_update,
         actor_update,
         safe,
@@ -594,6 +637,7 @@ def train(
         cost_pessimism,
         model_to_real_data_ratio,
         offline,
+        save_sooper_backup,
         model_ensemble_size,
         sac_batch_size,
         disagreement_normalize_fn,
@@ -815,6 +859,10 @@ def train(
                 training_state.model_params,
                 training_state.model_optimizer_state,
                 training_state.disagreement_normalizer_params,
+                training_state.backup_qr_params,
+                training_state.backup_qc_params,
+                training_state.backup_qr_optimizer_state,
+                training_state.backup_qc_optimizer_state,
             )
             if store_buffer:
                 params += (model_buffer_state,)
@@ -848,6 +896,10 @@ def train(
         training_state.model_params,
         training_state.model_optimizer_state,
         training_state.disagreement_normalizer_params,
+        training_state.backup_qr_params,
+        training_state.backup_qc_params,
+        training_state.backup_qr_optimizer_state,
+        training_state.backup_qc_optimizer_state,
     )
     if store_buffer:
         params += (model_buffer_state,)

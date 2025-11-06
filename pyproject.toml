@@ -40,7 +40,6 @@ onnx = [
     "pyzmq>=27.0.0,<28",
     "tensorflow-cpu==2.17.1",
 ]
-madrona-mjx = ["madrona-mjx"]
 
 [tool.uv]
 default-groups = ["dev", "wandb", "hydra-submitit", "onnx"]
@@ -51,7 +50,6 @@ url = "https://pypi.org/simple/"
 default = true
 
 [tool.uv.sources]
-madrona-mjx = { path = "../madrona_mjx", editable = true }
 brax = { git = "https://github.com/Andrew-Luo1/brax.git", rev = "bc_checkpointing" }
 playground = { git = "https://github.com/Andrew-Luo1/mujoco_playground_new.git" }
 

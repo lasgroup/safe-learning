@@ -1,73 +1,65 @@
-[tool.poetry]
+[project]
 name = "ss2r"
 version = "0.1.0"
 description = ""
-authors = ["Yarden <yarden.as@inf.ethz.ch>"]
+authors = [{ name = "Yarden", email = "yarden.as@inf.ethz.ch" }]
+requires-python = ">=3.11.6,<4"
 readme = "README.md"
+dependencies = [
+    "mujoco==3.3.0",
+    "mujoco-mjx==3.2.7",
+    "jax[cuda12]==0.4.34",
+    "hydra-core>=1.3.2,<2",
+    "hydra-submitit-launcher>=1.2.0,<2",
+    "tabulate>=0.9.0,<0.10",
+    "nvidia-cublas-cu12==12.9.0.13",
+    "moviepy==1.0.3",
+    "imageio>=2.37.0,<3",
+    "brax",
+    "playground",
+    "nvidia-cuda-nvrtc-cu12>=12.9.86,<13",
+    "matplotlib>=3.10.3,<4",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11.6,<3.12"
-mujoco = "3.3.0"
-mujoco-mjx = "3.2.7"
-jax = {version = "0.4.34", extras = ["cuda12"]}
-hydra-core = "^1.3.2"
-hydra-submitit-launcher = "^1.2.0"
-tabulate = "^0.9.0"
-nvidia-cublas-cu12 = "12.9.0.13"
-moviepy = "1.0.3"
-imageio = "^2.37.0"
-# TODO (yarden): update these once they are merged to main
-brax = {git = "https://github.com/Andrew-Luo1/brax.git", rev = "bc_checkpointing"}
-playground = {git = "https://github.com/Andrew-Luo1/mujoco_playground_new.git"}
-nvidia-cuda-nvrtc-cu12 = "^12.9.86"
-matplotlib = "^3.10.3"
+[dependency-groups]
+dev = [
+    "mypy>=1.7.0,<2",
+    "pre-commit>=3.5.0,<4",
+    "pytest>=7.4.3,<8",
+    "pytest-mock>=3.12.0,<4",
+    "types-tabulate>=0.9.0.20240106,<0.10",
+    "seaborn>=0.13.2,<0.14",
+    "ipykernel>=6.29.4,<7",
+    "tueplots>=0.0.17,<0.0.18",
+    "ruff>=0.9.6,<0.10",
+]
+wandb = ["wandb>=0.16.4,<0.17"]
+hydra-submitit = ["hydra-submitit-launcher>=1.2.0,<2"]
+onnx = [
+    "tf2onnx>=1.16.1,<2",
+    "onnxruntime>=1.20.1,<2",
+    "keras>=2.13.1",
+    "pyzmq>=27.0.0,<28",
+    "tensorflow-cpu==2.17.1",
+]
+madrona-mjx = ["madrona-mjx"]
 
-[[tool.poetry.source]]
+[tool.uv]
+default-groups = ["dev", "wandb", "hydra-submitit", "onnx"]
+
+[[tool.uv.index]]
 name = "PyPI"
-priority = "primary"
+url = "https://pypi.org/simple/"
+default = true
 
-[tool.poetry.group.dev]
-optional = true
-
-[tool.poetry.group.dev.dependencies]
-mypy = "^1.7.0"
-pre-commit = "^3.5.0"
-pytest = "^7.4.3"
-pytest-mock = "^3.12.0"
-types-tabulate = "^0.9.0.20240106"
-seaborn = "^0.13.2"
-ipykernel = "^6.29.4"
-tueplots = "^0.0.17"
-ruff = "^0.9.6"
-
-[tool.poetry.group.wandb.dependencies]
-wandb = "^0.16.4"
-
-[tool.poetry.group.hydra-submitit]
-optional = true
-
-[tool.poetry.group.hydra-submitit.dependencies]
-hydra-submitit-launcher = "^1.2.0"
-
-[tool.poetry.group.onnx]
-optional = true
-
-[tool.poetry.group.onnx.dependencies]
-tf2onnx = "^1.16.1"
-onnxruntime = "^1.20.1"
-keras = ">=2.13.1"
-pyzmq = "^27.0.0"
-tensorflow-cpu = "2.17.1"
-
-[tool.poetry.group.madrona-mjx]
-optional = true
-
-[tool.poetry.group.madrona-mjx.dependencies]
-madrona-mjx = { path = "../madrona_mjx", develop = true }
+[tool.uv.sources]
+madrona-mjx = { path = "../madrona_mjx", editable = true }
+brax = { git = "https://github.com/Andrew-Luo1/brax.git", rev = "bc_checkpointing" }
+playground = { git = "https://github.com/Andrew-Luo1/mujoco_playground_new.git" }
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 88

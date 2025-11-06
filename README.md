@@ -11,7 +11,7 @@ A collection of algorithms and experiment tools for safe sim to real transfer an
 ## Requirements
 
 - Python == 3.11.6
-- `venv` or `Poetry`
+- [`uv`](https://docs.astral.sh/uv/) (recommended) or the built-in `venv`
 
 ## Installation
 
@@ -25,13 +25,21 @@ source venv/bin/activate
 pip install -e .
 ````
 
-### Using Poetry
+### Using uv
+
+Install uv if it is not already available:
+
+```bash
+pip install uv
+```
+
+Create a project environment and install dependencies:
 
 ```bash
 git clone https://github.com/yardenas/safe-learning
 cd safe-learning
-poetry install
-poetry shell
+uv sync
+uv run python --version  # sanity check, optional
 ```
 
 ## Usage
@@ -65,4 +73,3 @@ If you find our repository useful in your work, please consider citing:
 * **Project Webpage**: 
 * **Paper**:
 * **Contact**: 
-

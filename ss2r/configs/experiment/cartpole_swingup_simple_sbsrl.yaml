@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - mujoco_playground_dm_control_mbpo
+  #- mujoco_playground_dm_control_mbpo
   - override /environment: cartpole_swingup
   - override /agent: sbsrl
   - override /agent/penalizer: multi_lagrangian
@@ -17,7 +17,7 @@ training:
   num_eval_episodes: 1
   num_envs: 20
   num_evals: 15
-  #wandb_id: 8bp2hgfl
+  wandb_id: fj541g95
 
 agent:
   activation: swish
@@ -25,11 +25,10 @@ agent:
   value_hidden_layer_sizes: [512, 512]
   batch_size: 256
   max_replay_size: 4194304
-  critic_grad_updates_per_step: 10
+  critic_grad_updates_per_step: 50
   model_grad_updates_per_step: 50
   num_model_rollouts: 50000
-  #discounting: 0.95
-  reward_scaling: 100
+  reward_scaling: 1
   cost_scaling: 10
   uncertainty_constraint: true
   uncertainty_epsilon: 0.0

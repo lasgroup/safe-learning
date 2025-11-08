@@ -8,4 +8,4 @@ task_params:
   episode_length: 300
   sim_dt: 0.0025
   vision: false
-  ground_start_probability: 0.
+  ground_start_probability: 0.9

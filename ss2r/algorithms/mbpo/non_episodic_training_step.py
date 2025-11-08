@@ -73,7 +73,7 @@ def make_non_episodic_training_step(
             # goal safe set yet.
             cost = transitions.extras["state_extras"]["cost"]
             new_discount = jnp.where(
-                cost > 0.0,
+                (cost > 0.0) & (transitions.discount),
                 jnp.ones_like(transitions.discount),
                 jnp.zeros_like(transitions.discount),
             )

@@ -68,7 +68,7 @@ install it inside the UV environment you created above:
    cd ..
    ```
 
-3. Install the Python bindings into your UV environment:
+3. While having your environment activated, install the Python bindings into your UV environment:
 
    ```bash
    uv pip install -e .
@@ -77,6 +77,17 @@ install it inside the UV environment you created above:
 Refer to the upstream repository for platform-specific prerequisites (CUDA,
 Vulkan, compiler versions). Re-run `uv pip install -e .` whenever you rebuild the
 library.
+
+**Troubleshooting tips**
+
+- If you see CUDA OOMs immediately after the build, try `export
+  MADRONA_DISABLE_CUDA_HEAP_SIZE=1` before launching training.
+- Populate the kernel caches to avoid recompilation on every run:
+
+  ```bash
+  export MADRONA_MWGPU_KERNEL_CACHE=/path/to/cache/mwgpu
+  export MADRONA_BVH_KERNEL_CACHE=/path/to/cache/bvh
+  ```
 
 ## Usage
 

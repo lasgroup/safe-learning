@@ -42,7 +42,7 @@ onnx = [
 ]
 
 [tool.uv]
-default-groups = ["dev", "wandb", "hydra-submitit", "onnx"]
+default-groups = ["dev", "wandb", "onnx"]
 
 [[tool.uv.index]]
 name = "PyPI"

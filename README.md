@@ -42,6 +42,42 @@ uv sync
 uv run python --version  # sanity check, optional
 ```
 
+### Installing `madrona_mjx` (optional, required for Madrona backend)
+
+Some benchmarks (e.g., the MJX-based pick-and-place tasks) require the custom
+[`madrona_mjx`](https://github.com/shacklettbp/madrona_mjx) fork. Build and
+install it inside the UV environment you created above:
+
+1. From the parent directory of `safe-sim2real`, clone the repository and check
+   out the tested commit:
+
+   ```bash
+   git clone https://github.com/shacklettbp/madrona_mjx.git
+   cd madrona_mjx
+   git checkout c34f3cf6d95148dba50ffeb981aea033b8a4d225
+   git submodule update --init --recursive
+   ```
+
+2. Configure and build (disable Vulkan if you do not have it available):
+
+   ```bash
+   mkdir -p build
+   cd build
+   cmake -DLOAD_VULKAN=OFF ..
+   cmake --build . -j
+   cd ..
+   ```
+
+3. Install the Python bindings into your UV environment:
+
+   ```bash
+   uv pip install -e .
+   ```
+
+Refer to the upstream repository for platform-specific prerequisites (CUDA,
+Vulkan, compiler versions). Re-run `uv pip install -e .` whenever you rebuild the
+library.
+
 ## Usage
 
 Our code uses [Hydra](https://hydra.cc/) to configure experiments. Each experiment is defined as a `yaml` file in `ss2r/configs/experiments`. For example, to train a Unitree Go1 policy with a constraint on joint limit:

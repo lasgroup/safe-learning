@@ -68,7 +68,7 @@ def make_non_episodic_training_step(
             optimizer_state=training_state.behavior_qr_optimizer_state,
             params=training_state.behavior_qr_params,
         )
-        if safe:
+        if safe and "cost" in transitions.extras["state_extras"]:
             # If the cost is greater than 1, we haven't reached our
             # goal safe set yet.
             cost = transitions.extras["state_extras"]["cost"]

@@ -170,13 +170,13 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
             jp.linalg.norm(
                 mjx_env.get_sensor_data(self.mj_model, state.data, "torso_touch")
             )
-            > 1500.0
+            > 2500.0
         )
         head_force = (
             jp.linalg.norm(
                 mjx_env.get_sensor_data(self.mj_model, state.data, "head_touch")
             )
-            > 1500.0
+            > 2500.0
         )
         terminate = on_ground & (torso_force | head_force)
         nans = jp.isnan(state.data.qpos).any() | jp.isnan(state.data.qvel).any()

@@ -179,6 +179,7 @@ class NonEpisodicHumanoid(humanoid.Humanoid):
             > 5000.0
         )
         terminate = on_ground & (torso_force | head_force)
+        terminate = terminate | jp.isnan(terminate)
         nans = jp.isnan(state.data.qpos).any() | jp.isnan(state.data.qvel).any()
         done = terminate | nans
         outs = outs.replace(done=done.astype(jp.float32))

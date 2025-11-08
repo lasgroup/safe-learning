@@ -161,8 +161,6 @@ def make_non_episodic_training_step(
             behavior_target_qr_params=new_behavior_target_qr_params,
             backup_qc_optimizer_state=backup_qc_optimizer_state,
             backup_qc_params=backup_qc_params,
-            behavior_qc_optimizer_state=backup_qc_optimizer_state,
-            behavior_qc_params=backup_qc_params,
             backup_target_qc_params=new_backup_target_qc_params,
             gradient_steps=training_state.gradient_steps + 1,
             behavior_policy_optimizer_state=policy_optimizer_state,

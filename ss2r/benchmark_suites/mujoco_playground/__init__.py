@@ -95,8 +95,8 @@ def wrap_for_brax_training(
         env = wrappers.NonEpisodicWrapper(env, action_repeat)
     else:
         env = wrappers.CostEpisodeWrapper(env, episode_length, action_repeat)
-        if hard_resets:
-            env = wrappers.HardAutoResetWrapper(env)
-        else:
-            env = mujoco_playground_wrapper.BraxAutoResetWrapper(env)
+    if hard_resets:
+        env = wrappers.HardAutoResetWrapper(env)
+    else:
+        env = mujoco_playground_wrapper.BraxAutoResetWrapper(env)
     return env

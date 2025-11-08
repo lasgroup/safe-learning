@@ -12,10 +12,6 @@ training:
   episode_length: 300
   safe: true
 
-environment:
-  task_params:
-    ground_start_probability: 0.9
-
 agent:
   training_step_fn: nonepisodic
   safety_discounting: 1.

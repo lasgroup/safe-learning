@@ -15,6 +15,11 @@ training:
   num_envs: 128
   num_evals: 20
   num_eval_envs: 128
+  episode_length: 1000
+environment:
+  task_params:
+    episode_length: 1000
+    action_repeat: 4
 
 agent:
   policy_hidden_layer_sizes: [256, 256, 256]
@@ -22,7 +27,7 @@ agent:
   activation: swish
   batch_size: 256
   min_replay_size: 5000
-  max_replay_size: 1048576
+  max_replay_size: 1548576
   critic_grad_updates_per_step: 50
   model_grad_updates_per_step: 50
   num_model_rollouts: 200

@@ -14,6 +14,7 @@ init_alpha: 1.
 discounting: 0.99
 min_alpha: 0.
 safety_discounting: 0.99
+sigma_discounting: 0.99
 batch_size: 256
 sac_batch_size: 256
 normalize_observations: True

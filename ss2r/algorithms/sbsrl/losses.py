@@ -40,6 +40,7 @@ def make_losses(
     sigma_scaling: float,
     discounting: float,
     safety_discounting: float,
+    sigma_discounting: float,
     action_size: int,
     use_bro: bool,
     normalize_fn,
@@ -136,7 +137,16 @@ def make_losses(
             if safe or uncertainty_constraint
             else reward_scaling
         )
-        gamma = safety_discounting if safe or uncertainty_constraint else discounting
+        gammas = []
+        if safe:
+            gammas.append(safety_discounting)
+        if uncertainty_constraint:
+            gammas.append(sigma_discounting)
+        gamma = (
+            jnp.stack(gammas, axis=-1)
+            if safe or uncertainty_constraint
+            else discounting
+        )
         q_old_action = q_network.apply(
             normalizer_params,
             q_params,

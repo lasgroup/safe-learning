@@ -8,6 +8,9 @@ defaults:
 
 environment:
   task_name: NonEpisodicHumanoidWalk
+  task_params:
+    ground_start_probability: 1.
+
 
 training:
   num_timesteps: 5000000

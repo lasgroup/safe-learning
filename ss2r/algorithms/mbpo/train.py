@@ -401,7 +401,7 @@ def train(
                 backup_qc_params=params[4] if safe else None,
                 backup_target_qc_params=params[4] if safe else None,
             )
-        if load_auxiliaries:
+        if load_auxiliaries and not learn_from_scratch:
             policy_optimizer_state = restore_state(
                 params[6][1]["inner_state"]
                 if isinstance(params[6][1], dict)

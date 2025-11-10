@@ -131,7 +131,7 @@ class PrimalDualLagrangian:
         g = -constraints
         actor_loss += jnp.sum(multipliers * g)
 
-        new_multipliers = jnp.maximum(multipliers + self.lr * g, 0.0)
+        new_multipliers = jnp.clip(multipliers + self.lr * g, 0.0, 100.0)
 
         new_params = PrimalDualLagrangianParams(lagrange_multiplier=new_multipliers)
 

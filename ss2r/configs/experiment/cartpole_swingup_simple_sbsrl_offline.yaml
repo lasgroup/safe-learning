@@ -17,7 +17,7 @@ training:
   num_envs: 128
   num_evals: 20
   num_eval_envs: 128
-  wandb_id: 5pikekdg
+  wandb_id: czvd46rl
 
 agent:
   activation: swish
@@ -32,9 +32,10 @@ agent:
   save_sooper_backup: true
   flip_uncertainty_constraint: true
   uncertainty_constraint: true
-  uncertainty_epsilon: 10
+  uncertainty_epsilon: 30
   cost_scaling: 100
-  model_to_real_data_ratio: 0.25
+  reward_scaling: 1
+  model_to_real_data_ratio: 0.5
   reward_pessimism: 0.
   penalizer:
     initial_multiplier_uncertainty: 0.01

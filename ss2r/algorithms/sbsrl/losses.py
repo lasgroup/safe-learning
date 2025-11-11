@@ -240,6 +240,7 @@ def make_losses(
             qr = jnp.mean(qr_action, axis=-1)
         else:
             qr = jnp.min(qr_action, axis=-1)
+        qr /= reward_scaling
         actor_loss = -qr.mean()
         exploration_loss = (alpha * log_prob).mean()
 

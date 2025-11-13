@@ -482,6 +482,9 @@ def draw_scene(obs, timestep, obstacles):
     ax.grid(True, linewidth=0.5, c="gainsboro", zorder=0)
     # Render figure to canvas and retrieve RGB array
     canvas.draw()
-    image = np.frombuffer(canvas.tostring_rgb(), dtype="uint8").copy()
+    if hasattr(canvas, "tostring_rgb"):
+        image = np.frombuffer(canvas.tostring_rgb(), dtype=np.uint8).copy()
+    else:
+        image = np.asarray(canvas.buffer_rgba())[:, :, :3].copy()
     image = image.reshape(*reversed(canvas.get_width_height()), 3)
     return image

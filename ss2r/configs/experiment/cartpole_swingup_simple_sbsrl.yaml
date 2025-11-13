@@ -25,7 +25,7 @@ agent:
   value_hidden_layer_sizes: [512, 512]
   batch_size: 256
   max_replay_size: 4194304
-  critic_grad_updates_per_step: 50
+  critic_grad_updates_per_step: 10
   model_grad_updates_per_step: 50
   num_model_rollouts: 50000
   reward_scaling: 1

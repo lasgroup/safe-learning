@@ -291,8 +291,11 @@ def make_losses(
                 )
                 aux |= penalizer_aux
                 if safe:
+                    n_safety_constraints = ensemble_size
+                    if use_mean_critic:
+                        n_safety_constraints = 1
                     aux["cost_multipliers"] = penalizer_params.lagrange_multiplier[
-                        :ensemble_size
+                        :n_safety_constraints
                     ]
                 if uncertainty_constraint:
                     aux["sigma_multipliers"] = penalizer_params.lagrange_multiplier[-1]

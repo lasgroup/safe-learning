@@ -210,6 +210,7 @@ def train(
     num_evals: int = 1,
     normalize_observations: bool = False,
     normalize_disagreement: bool = False,
+    load_disagreement_normalizer: bool = False,
     reward_scaling: float = 1.0,
     cost_scaling: float = 1.0,
     sigma_scaling: float = 1.0,
@@ -460,7 +461,7 @@ def train(
         else:
             ts_normalizer_params = params[0]
         if (
-            params and not offline and normalize_disagreement
+            params and not offline and load_disagreement_normalizer
         ):  # TODO: should I load normalizer_params offline?
             if isinstance(
                 ts_disagreement_normalizer_params.mean, dict

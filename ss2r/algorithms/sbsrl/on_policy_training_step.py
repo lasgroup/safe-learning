@@ -419,6 +419,10 @@ def make_on_policy_training_step(
                 transitions.reward.shape, disagreement
             )  # (B,ensemble_size)
             disagreement_metrics = {"normalized_disagreement": disagreement.mean()}
+            if safe:
+                transitions.extras["state_extras"]["cost"] += (
+                    disagreement * cost_pessimism
+                )
         sac_replay_buffer_state = sac_replay_buffer.insert(
             sac_replay_buffer_state, float16(transitions)
         )
@@ -473,6 +477,7 @@ def make_on_policy_training_step(
             transitions.extras["state_extras"]["cost"] = jnp.tile(
                 transitions.extras["state_extras"]["cost"][:, None], (1, ensemble_size)
             )
+            transitions.extras["state_extras"]["cost"] += disagreement * cost_pessimism
 
         return training_state, Transition(
             observation=transitions.observation,

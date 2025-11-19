@@ -439,15 +439,19 @@ def train(
             ts_normalizer_params = get_dict_normalizer_params(
                 params, ts_normalizer_params, 0
             )
-        if (
-            isinstance(ts_disagreement_normalizer_params.mean, dict)
-            and not isinstance(params[12].mean, dict)
-            and params
-            and not (offline and len(params) == 13)
-        ):
-            ts_disagreement_normalizer_params = get_dict_normalizer_params(
-                params, ts_disagreement_normalizer_params, 12
-            )
+        else:
+            ts_normalizer_params = params[0]
+        if params and not offline:
+            if isinstance(
+                ts_disagreement_normalizer_params.mean, dict
+            ) and not isinstance(params[12].mean, dict):
+                ts_disagreement_normalizer_params = get_dict_normalizer_params(
+                    params, ts_disagreement_normalizer_params, 12
+                )
+            else:
+                ts_disagreement_normalizer_params = params[
+                    12
+                ]  # TODO: should I load normalizer_params offline
         if offline:
             model_buffer_state = replay_buffers.ReplayBufferState(**params[-1])
             training_state = training_state.replace(  # type: ignore

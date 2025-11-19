@@ -28,7 +28,7 @@ from absl import logging
 from brax import envs
 from brax.training import replay_buffers
 from brax.training.acme import running_statistics, specs
-from brax.training.acme.running_statistics import NestedMeanStd
+from brax.training.acme.running_statistics import NestedMeanStd, RunningStatisticsState
 from brax.training.acme.types import NestedArray
 from brax.training.agents.sac import checkpoint
 from brax.training.types import PRNGKey
@@ -79,6 +79,24 @@ def get_dict_normalizer_params(params, ts_normalizer_params, idx):
         summed_variance=summed_var,
     )
     return ts_normalizer_params
+
+
+def dict_to_running_statistics(d: dict) -> RunningStatisticsState:
+    """
+    Convert type from dict into RunningStatisticsState
+    """
+    if isinstance(d, RunningStatisticsState):
+        return d
+
+    mean = d.get("mean")
+    std = d.get("std")
+    summed_variance = d.get("summed_variance", None)
+    count = d.get("count", 0)
+
+    count = jnp.asarray(count)
+    return RunningStatisticsState(
+        mean=mean, std=std, summed_variance=summed_variance, count=count
+    )
 
 
 def _init_training_state(
@@ -441,7 +459,9 @@ def train(
             )
         else:
             ts_normalizer_params = params[0]
-        if params and not offline:
+        if (
+            params and not offline and normalize_disagreement
+        ):  # TODO: should I load normalizer_params offline?
             if isinstance(
                 ts_disagreement_normalizer_params.mean, dict
             ) and not isinstance(params[12].mean, dict):
@@ -449,9 +469,9 @@ def train(
                     params, ts_disagreement_normalizer_params, 12
                 )
             else:
-                ts_disagreement_normalizer_params = params[
-                    12
-                ]  # TODO: should I load normalizer_params offline
+                ts_disagreement_normalizer_params = dict_to_running_statistics(
+                    params[12]
+                )
         if offline:
             model_buffer_state = replay_buffers.ReplayBufferState(**params[-1])
             training_state = training_state.replace(  # type: ignore

@@ -81,7 +81,7 @@ class AugmentedLagrangian:
             "lagrangian_cond": cond,
             "lagrange_multiplier": new_params.lagrange_multiplier,
         }
-        return actor_loss + psi, aux, new_params
+        return actor_loss + jnp.sum(psi), aux, new_params
 
 
 def augmented_lagrangian(
@@ -269,6 +269,39 @@ def get_penalizer(cfg):
         init_multipliers = jnp.concatenate(initial_list, axis=0)
         penalizer_state = PrimalDualLagrangianParams(
             lagrange_multiplier=init_multipliers
+        )
+    elif cfg.agent.penalizer.name == "multiaug_lagrangian":
+        penalizer = AugmentedLagrangian(cfg.agent.penalizer.penalty_multiplier_factor)
+        # broadcast scalar config parameters to a vector if multiple constraints are needed
+        n_constraints = 0
+        lagrange_multiplier_list = []
+        penalty_multiplier_list = []
+        if cfg.training.get("safe", False):
+            n_safety_constraints = cfg.agent["model_ensemble_size"]
+            if cfg.agent.use_mean_critic:
+                n_safety_constraints = 1
+            n_constraints += n_safety_constraints
+            lagrange_multiplier_list.append(
+                cfg.agent.penalizer.lagrange_multiplier * jnp.ones(n_safety_constraints)
+            )
+            penalty_multiplier_list.append(
+                cfg.agent.penalizer.penalty_multiplier * jnp.ones(n_safety_constraints)
+            )
+        if cfg.agent.get("uncertainty_constraint", False):
+            n_constraints += 1
+            lagrange_multiplier_list.append(
+                cfg.agent.penalizer.lagrange_multiplier * jnp.ones(1)
+            )
+            penalty_multiplier_list.append(
+                cfg.agent.penalizer.penalty_multiplier * jnp.ones(1)
+            )
+        if n_constraints == 0:
+            return None, None
+        lagrange_multipliers = jnp.concatenate(lagrange_multiplier_list, axis=0)
+        penalty_multipliers = jnp.concatenate(penalty_multiplier_list, axis=0)
+        penalizer_state = AugmentedLagrangianParams(
+            lagrange_multipliers,
+            penalty_multipliers,
         )
     else:
         raise ValueError(f"Unknown penalizer {cfg.agent.penalizer.name}")

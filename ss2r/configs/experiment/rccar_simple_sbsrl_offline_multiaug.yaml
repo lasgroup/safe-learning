@@ -2,7 +2,7 @@
 defaults:
   - override /environment: rccar_real
   - override /agent: sbsrl
-  - override /agent/penalizer: multi_lagrangian
+  - override /agent/penalizer: multiaug_lagrangian
   - _self_
 
 environment:

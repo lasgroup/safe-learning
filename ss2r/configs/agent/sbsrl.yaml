@@ -58,3 +58,4 @@ uncertainty_constraint: false
 uncertainty_epsilon: 0.0
 use_mean_critic: true
 load_disagreement_normalizer: false
+pessimistic_cost: false

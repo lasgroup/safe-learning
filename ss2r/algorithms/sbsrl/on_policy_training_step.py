@@ -53,6 +53,7 @@ def make_on_policy_training_step(
     safety_budget,
     reward_pessimism,
     cost_pessimism,
+    pessimistic_cost,
     model_to_real_data_ratio,
     offline,
     save_sooper_backup,
@@ -133,7 +134,7 @@ def make_on_policy_training_step(
         )
         alpha = jnp.exp(training_state.alpha_params) + min_alpha
 
-        if offline:
+        if offline or pessimistic_cost:
             transitions = relabel_offline_transitions(planning_env, transitions)
 
         # reshape transitions with leading ensemble size
@@ -419,10 +420,6 @@ def make_on_policy_training_step(
                 transitions.reward.shape, disagreement
             )  # (B,ensemble_size)
             disagreement_metrics = {"normalized_disagreement": disagreement.mean()}
-            if safe:
-                transitions.extras["state_extras"]["cost"] += (
-                    disagreement * cost_pessimism
-                )
         sac_replay_buffer_state = sac_replay_buffer.insert(
             sac_replay_buffer_state, float16(transitions)
         )
@@ -477,7 +474,6 @@ def make_on_policy_training_step(
             transitions.extras["state_extras"]["cost"] = jnp.tile(
                 transitions.extras["state_extras"]["cost"][:, None], (1, ensemble_size)
             )
-            transitions.extras["state_extras"]["cost"] += disagreement * cost_pessimism
 
         return training_state, Transition(
             observation=transitions.observation,

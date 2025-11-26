@@ -2,7 +2,7 @@
 defaults:
   - override /environment: go_to_goal_easy
   - override /agent: sbsrl
-  - override /agent/penalizer: multi_lagrangian
+  - override /agent/penalizer: multiaug_lagrangian
   - _self_
 
 training:
@@ -14,7 +14,7 @@ training:
   action_repeat: 4
   num_envs: 20
   num_evals: 15
-  wandb_id: e2gyjsij
+  wandb_id: abroefct
 
 agent:
   policy_hidden_layer_sizes: [256, 256, 256]
@@ -27,16 +27,17 @@ agent:
   num_model_rollouts: 50000
   offline: true
   save_sooper_backup: true
-  flip_uncertainty_constraint: true
+  flip_uncertainty_constraint: false
   discounting: 0.99
   safety_discounting: 0.999
   normalize_budget: false
-  cost_scaling: 200
+  cost_scaling: 1
   uncertainty_constraint: true
-  uncertainty_epsilon: 40
-  model_to_real_data_ratio: 0.25
+  uncertainty_epsilon: 0
+  model_to_real_data_ratio: 0.5
   reward_pessimism: 0.
+  use_mean_critic: false
   penalizer:
-    initial_multiplier_cost: 0.01
-    initial_multiplier_uncertainty: 0.01
-    learning_rate: 7e-7
+    lagrange_multiplier: 0.1
+    penalty_multiplier: 0.001
+    penalty_multiplier_factor: 1e-4

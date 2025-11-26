@@ -290,7 +290,7 @@ def get_penalizer(cfg):
         if cfg.agent.get("uncertainty_constraint", False):
             n_constraints += 1
             lagrange_multiplier_list.append(
-                cfg.agent.penalizer.lagrange_multiplier * jnp.ones(1)
+                cfg.agent.penalizer.lagrange_multiplier_sigma * jnp.ones(1)
             )
             penalty_multiplier_list.append(
                 cfg.agent.penalizer.penalty_multiplier * jnp.ones(1)

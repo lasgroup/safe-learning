@@ -56,6 +56,6 @@ pessimistic_q: false
 training_step_fn: on_policy
 uncertainty_constraint: false
 uncertainty_epsilon: 0.0
-use_mean_critic: true
+use_mean_critic: false
 load_disagreement_normalizer: false
 pessimistic_cost: false

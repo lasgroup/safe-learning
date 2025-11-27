@@ -6,12 +6,12 @@ defaults:
   - _self_
 
 training:
-  num_timesteps: 5000000
+  num_timesteps: 544768
   action_repeat: 4
   safe: true
   train_domain_randomization: false
   eval_domain_randomization: false
-  safety_budget: 50
+  safety_budget: 15
   num_envs: 128
   num_evals: 20
   num_eval_envs: 128

@@ -20,7 +20,7 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: false
   safety_budget: 5.0
-  wandb_id: fsmihq04
+  wandb_id: fh46s5xs
 
 agent:
   batch_size: 256
@@ -42,10 +42,10 @@ agent:
   uncertainty_epsilon: 0
   cost_scaling: 1
   reward_scaling: 1
-  model_to_real_data_ratio: 0.25
-  reward_pessimism: 100.
-  cost_pessimism: 30.
-  normalize_disagreement: false
+  model_to_real_data_ratio: 0.5
+  reward_pessimism: 10
+  cost_pessimism: 0.
+  normalize_disagreement: true
   penalizer:
     lagrange_multiplier: 0.1
     penalty_multiplier: 0.001

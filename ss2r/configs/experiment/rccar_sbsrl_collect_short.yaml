@@ -14,13 +14,13 @@ environment:
 
 training:
   num_envs: 1
-  num_timesteps: 100000
+  num_timesteps: 200000
   episode_length: 250
   safe: true
   train_domain_randomization: false
   eval_domain_randomization: false
-  safety_budget: 5.0
-  wandb_id: w6rx8gh9 #,fajh8wmd,4fzzryu4,mvlk6jva,ejzn65i2
+  safety_budget: 2
+  wandb_id: null
 
 agent:
   batch_size: 256
@@ -45,12 +45,10 @@ agent:
   cost_pessimism: 0
   normalize_disagreement: true
   pessimistic_cost: true
+  store_buffer: true
   penalizer:
-    #initial_multiplier_uncertainty: 0.01
-    #initial_multiplier_cost: 10
-    #learning_rate: 1e-2
     lagrange_multiplier: 0.1
-    penalty_multiplier: 5e-8
+    penalty_multiplier: 0.001
     penalty_multiplier_factor: 1e-4
 
 

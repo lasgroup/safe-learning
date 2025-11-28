@@ -461,9 +461,7 @@ def train(
             )
         else:
             ts_normalizer_params = params[0]
-        if (
-            params and not offline and load_disagreement_normalizer
-        ):  # TODO: should I load normalizer_params offline?
+        if params and not offline and load_disagreement_normalizer:
             if isinstance(
                 ts_disagreement_normalizer_params.mean, dict
             ) and not isinstance(params[12].mean, dict):

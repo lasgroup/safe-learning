@@ -6,7 +6,7 @@ defaults:
 
 
 training:
-  num_timesteps: 5000000
+  num_timesteps: 4000000
   safe: true
   train_domain_randomization: false
   eval_domain_randomization: false
@@ -15,3 +15,4 @@ training:
 
 agent:
   activation: swish
+

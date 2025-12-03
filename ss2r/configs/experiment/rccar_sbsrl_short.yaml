@@ -49,8 +49,8 @@ agent:
     #initial_multiplier_uncertainty: 0.01
     #initial_multiplier_cost: 10
     #learning_rate: 1e-2
-    lagrange_multiplier: 0.1
-    penalty_multiplier: 5e-8
+    lagrange_multiplier: 1
+    penalty_multiplier: 1e-3
     penalty_multiplier_factor: 1e-4
 
 

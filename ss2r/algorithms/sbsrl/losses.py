@@ -48,6 +48,7 @@ def make_losses(
     safe,
     save_sooper_backup,
     use_mean_critic,
+    use_max_critic,
     uncertainty_constraint,
     uncertainty_epsilon,
     n_critics,
@@ -266,6 +267,8 @@ def make_losses(
                 qc_constr = mean_qc
                 if use_mean_critic:
                     qc_constr = mean_qc.mean()
+                if use_max_critic:
+                    qc_constr = mean_qc.max()
                 aux["qc_max"] = mean_qc.max()
                 safety_constraint = (
                     safety_budget - qc_constr
@@ -293,7 +296,7 @@ def make_losses(
                 aux |= penalizer_aux
                 if safe:
                     n_safety_constraints = ensemble_size
-                    if use_mean_critic:
+                    if use_mean_critic or use_max_critic:
                         n_safety_constraints = 1
                     aux["cost_multipliers"] = penalizer_params.lagrange_multiplier[
                         :n_safety_constraints

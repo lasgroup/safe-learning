@@ -251,7 +251,7 @@ def get_penalizer(cfg):
         initial_list = []
         if cfg.training.get("safe", False):
             n_safety_constraints = cfg.agent["model_ensemble_size"]
-            if cfg.agent.use_mean_critic:
+            if cfg.agent.use_mean_critic or cfg.agent.use_max_critic:
                 n_safety_constraints = 1
             n_constraints += n_safety_constraints
             initial_list.append(
@@ -278,7 +278,7 @@ def get_penalizer(cfg):
         penalty_multiplier_list = []
         if cfg.training.get("safe", False):
             n_safety_constraints = cfg.agent["model_ensemble_size"]
-            if cfg.agent.use_mean_critic:
+            if cfg.agent.use_mean_critic or cfg.agent.use_max_critic:
                 n_safety_constraints = 1
             n_constraints += n_safety_constraints
             lagrange_multiplier_list.append(

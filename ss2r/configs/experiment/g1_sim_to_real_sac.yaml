@@ -1,0 +1,10 @@
+# @package _global_
+defaults:
+  - g1_joystick
+  - override /agent/penalizer: lagrangian
+  - _self_
+
+training:
+  train_domain_randomization: true
+  eval_domain_randomization: true
+  safe: false

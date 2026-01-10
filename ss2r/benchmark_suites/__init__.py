@@ -18,6 +18,7 @@ from ss2r.benchmark_suites.mujoco_playground.cartpole import cartpole as dm_cart
 from ss2r.benchmark_suites.mujoco_playground.cartpole.spidr_cartpole import (
     VisionSPiDRCartpole,
 )
+from ss2r.benchmark_suites.mujoco_playground.g1_joystick import g1_joystick
 from ss2r.benchmark_suites.mujoco_playground.go1_joystick import go1_joystick
 from ss2r.benchmark_suites.mujoco_playground.go2_joystick import (
     getup,
@@ -499,6 +500,7 @@ randomization_fns = {
     "rccar": rccar.domain_randomization,
     "humanoid": humanoid.domain_randomization,
     "humanoid_safe": humanoid.domain_randomization,
+    "G1JoystickFlatTerrain": g1_joystick.domain_randomization,
     "Go1JoystickFlatTerrain": go1_joystick.domain_randomization,
     "Go1JoystickRoughTerrain": go1_joystick.domain_randomization,
     "SafeJointGo1JoystickFlatTerrain": go1_joystick.domain_randomization,
@@ -549,6 +551,9 @@ render_fns = {
     "ant": functools.partial(brax.render, camera="track"),
     "ant_safe": functools.partial(brax.render, camera="track"),
     "rccar": rccar.render,
+    "G1JoystickFlatTerrain": functools.partial(
+        mujoco_playground.render, camera="track"
+    ),
     "Go1JoystickFlatTerrain": functools.partial(
         mujoco_playground.render, camera="track"
     ),

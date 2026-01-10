@@ -1,0 +1,104 @@
+defaults:
+  - mujoco_playground_base
+task_name: G1JoystickFlatTerrain
+task_params:
+  torque_limit: 12.
+  Kd: 0.5
+  Kp: 35.0
+  ctrl_dt: 0.02
+  sim_dt: 0.002
+  episode_length: 1000
+  action_repeat: 1
+  action_scale: 0.5
+  history_len: 1
+  restricted_joint_range: false
+  soft_joint_pos_limit_factor: 0.95
+  noise_config:
+    level: 1.0
+    scales:
+      joint_pos: 0.03
+      joint_vel: 1.5
+      gravity: 0.05
+      linvel: 0.1
+      gyro: 0.2
+  reward_config:
+    scales:
+      tracking_lin_vel: 1.0
+      tracking_ang_vel: 0.75
+      lin_vel_z: 0.0
+      ang_vel_xy: -0.15
+      orientation: -2.0
+      base_height: 0.0
+      torques: 0.0
+      action_rate: 0.0
+      energy: 0.0
+      dof_acc: 0.0
+      feet_clearance: 0.0
+      feet_air_time: 2.0
+      feet_slip: -0.25
+      feet_height: 0.0
+      feet_phase: 1.0
+      alive: 0.0
+      stand_still: -1.0
+      termination: -100.0
+      collision: -0.1
+      contact_force: -0.01
+      joint_deviation_knee: -0.1
+      joint_deviation_hip: -0.25
+      dof_pos_limits: -1.0
+      pose: -0.1
+    tracking_sigma: 0.25
+    max_foot_height: 0.15
+    base_height_target: 0.5
+    max_contact_force: 500.0
+  push_config:
+    enable: true
+    interval_range:
+      - 5.0
+      - 10.0
+    magnitude_range:
+      - 0.1
+      - 2.0
+  command_config:
+    a:
+      - 1.0
+      - 0.8
+      - 1.0
+    b:
+      - 0.9
+      - 0.25
+      - 0.5
+  lin_vel_x:
+    - -1.0
+    - 1.0
+  lin_vel_y:
+    - -0.5
+    - 0.5
+  ang_vel_yaw:
+    - -1.0
+    - 1.0
+  impl: jax
+  nconmax: 65536
+  njmax: 90
+
+train_params:
+  floor_friction: [0.4, 1.0]
+  scale_friction: [0.9, 1.1]
+  scale_armature: [1.0, 1.05]
+  jitter_mass: [-0.05, 0.05]
+  scale_link_mass: [0.9, 1.1]
+  add_torso_mass: [-1.0, 1.0]
+  jitter_qpos0: [-0.05, 0.05]
+  Kd: [0.0, 0.0]
+  Kp: [0.0, 0.0]
+
+eval_params:
+  floor_friction: [0.4, 1.0]
+  scale_friction: [0.9, 1.1]
+  scale_armature: [1.0, 1.05]
+  jitter_mass: [-0.05, 0.05]
+  scale_link_mass: [0.9, 1.1]
+  add_torso_mass: [-1.0, 1.0]
+  jitter_qpos0: [-0.05, 0.05]
+  Kd: [0.0, 0.0]
+  Kp: [0.0, 0.0]

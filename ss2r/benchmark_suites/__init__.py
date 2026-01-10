@@ -36,6 +36,7 @@ from ss2r.benchmark_suites.rccar import rccar
 from ss2r.benchmark_suites.safety_gym import go_to_goal
 from ss2r.benchmark_suites.utils import get_domain_name, get_task_config
 from ss2r.benchmark_suites.wrappers import (
+    ActionDelayWrapper,
     GoToGoalObservationWrapper,
     Saute,
     SPiDR,
@@ -385,6 +386,23 @@ def make_spidr_cartpole_vision(cfg, train_wrap_env_fn, eval_wrap_env_fn):
     return train_env, train_env
 
 
+def _get_action_delay_max(task_cfg, training_cfg):
+    def _extract(cfg_section):
+        if cfg_section is None or not hasattr(cfg_section, "get"):
+            return None
+        if not cfg_section.get("enable", False):
+            return None
+        max_delay = int(cfg_section.get("max_delay", 0))
+        if max_delay <= 0:
+            return None
+        return max_delay
+
+    max_delay = _extract(task_cfg.get("action_delay"))
+    if max_delay is not None:
+        return max_delay
+    return _extract(training_cfg.get("action_delay"))
+
+
 def make_mujoco_playground_envs(cfg, train_wrap_env_fn, eval_wrap_env_fn):
     from ml_collections import config_dict
     from mujoco_playground import registry
@@ -392,12 +410,15 @@ def make_mujoco_playground_envs(cfg, train_wrap_env_fn, eval_wrap_env_fn):
     from ss2r.benchmark_suites.mujoco_playground import wrap_for_brax_training
 
     task_cfg = get_task_config(cfg)
+    action_delay_max = _get_action_delay_max(task_cfg, cfg.training)
     task_params = config_dict.ConfigDict(task_cfg.task_params)
     vision = "use_vision" in cfg.agent and cfg.agent.use_vision
     if vision:
         _preinitialize_vision_env(task_cfg.task_name, task_params, registry)
     train_env = registry.load(task_cfg.task_name, config=task_params)
     train_env = train_wrap_env_fn(train_env)
+    if action_delay_max is not None:
+        train_env = ActionDelayWrapper(train_env, action_delay_max)
     train_key, eval_key = jax.random.split(jax.random.PRNGKey(cfg.training.seed))
     if vision and cfg.training.train_domain_randomization:
         train_randomization_fn = functools.partial(
@@ -429,6 +450,8 @@ def make_mujoco_playground_envs(cfg, train_wrap_env_fn, eval_wrap_env_fn):
         return train_env, train_env
     eval_env = registry.load(task_cfg.task_name, config=task_params)
     eval_env = eval_wrap_env_fn(eval_env)
+    if action_delay_max is not None:
+        eval_env = ActionDelayWrapper(eval_env, action_delay_max)
     eval_randomization_fn = (
         prepare_randomization_fn(
             eval_key,

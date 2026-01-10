@@ -112,6 +112,38 @@ class DomainRandomizationVmapWrapper(DomainRandomizationVmapBase):
         return env
 
 
+class ActionDelayWrapper(Wrapper):
+    def __init__(self, env: Env, max_delay: int):
+        super().__init__(env)
+        if max_delay < 0:
+            raise ValueError("max_delay must be >= 0")
+        self._max_delay = int(max_delay)
+
+    def reset(self, rng: jax.Array) -> State | MjxState:
+        rng, delay_rng = jax.random.split(rng)
+        state = self.env.reset(rng)
+        if self._max_delay == 0:
+            return state
+        action_buffer = jp.zeros((self._max_delay + 1, self.action_size))
+        state.info["action_delay_rng"] = delay_rng
+        state.info["action_delay_buffer"] = action_buffer
+        return state
+
+    def step(self, state: State | MjxState, action: jax.Array) -> State | MjxState:
+        if self._max_delay == 0:
+            return self.env.step(state, action)
+        rng = state.info["action_delay_rng"]
+        action_buffer = state.info["action_delay_buffer"]
+        rng, key = jax.random.split(rng)
+        action_buffer = jp.roll(action_buffer, shift=-1, axis=0)
+        action_buffer = action_buffer.at[-1].set(action)
+        delay = jax.random.randint(key, (), minval=0, maxval=self._max_delay + 1)
+        delayed_action = action_buffer[self._max_delay - delay]
+        state.info["action_delay_rng"] = rng
+        state.info["action_delay_buffer"] = action_buffer
+        return self.env.step(state, delayed_action)
+
+
 class CostEpisodeWrapper(brax_training.EpisodeWrapper):
     """Maintains episode step count and sets done at episode end."""
 

@@ -53,3 +53,6 @@ training:
   wandb_id: null
   hard_resets: false
   nonepisodic: false
+  action_delay:
+    enable: false
+    max_delay: 0

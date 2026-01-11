@@ -12,7 +12,7 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: true
   num_eval_envs: 128
-  render: true
+  render: false
   wandb_id: u5n93as3
   action_delay:
     max_delay: 1

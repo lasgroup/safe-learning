@@ -1,0 +1,24 @@
+# @package _global_
+defaults:
+  - go1_online
+  - override /agent/data_collection: episodic
+  - override /agent/replay_buffer: pytree
+  - override /environment: go1_joystick
+  - _self_
+  
+
+
+training:
+  train_domain_randomization: false
+  eval_domain_randomization: true
+  num_eval_envs: 128
+  render: true
+  wandb_id: u5n93as3
+  action_delay:
+    max_delay: 1
+    enable: false
+  
+    
+environment:
+  task_params:
+    ctrl_dt: 0.02

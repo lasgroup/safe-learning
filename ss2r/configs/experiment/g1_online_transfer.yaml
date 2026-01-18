@@ -14,11 +14,5 @@ training:
   wandb_id: bmzztihk
 
 
-environment:
-  train_params:  
-    floor_friction: [0.35, 0.35]
-  eval_params:
-    floor_friction: [0.35, 0.35]
-    
 agent:
   reset_on_eval: false

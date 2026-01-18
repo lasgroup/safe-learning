@@ -10,7 +10,5 @@ training:
   safe: false
 
 environment:
-  train_params:  
-    floor_friction: [0.7, 0.7]
-  eval_params:
-    floor_friction: [0.35, 0.35]
+  task_params:
+    action_scale: 0.3

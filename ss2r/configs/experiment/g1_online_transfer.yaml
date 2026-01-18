@@ -14,5 +14,9 @@ training:
   wandb_id: bmzztihk
 
 
+environment:
+  task_params:
+    action_scale: 0.3
+
 agent:
   reset_on_eval: false

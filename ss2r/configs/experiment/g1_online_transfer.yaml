@@ -5,8 +5,8 @@ defaults:
   - _self_
 
 training:
-  train_domain_randomization: true
-  eval_domain_randomization: true
+  train_domain_randomization: false
+  eval_domain_randomization: false
   num_eval_envs: 128
   render: false
   num_evals: 25

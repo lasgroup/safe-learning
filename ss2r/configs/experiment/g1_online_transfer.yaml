@@ -10,7 +10,7 @@ training:
   num_eval_envs: 128
   render: false
   num_evals: 25
-  num_timesteps: 400000
+  num_timesteps: 50000
   wandb_id: ne1qq0zy
 
 

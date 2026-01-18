@@ -12,3 +12,5 @@ training:
 environment:
   task_params:
     action_scale: 0.5
+  train_params:
+    floor_friction: [0.7, 0.7] 

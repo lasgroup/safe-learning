@@ -20,3 +20,4 @@ environment:
 
 agent:
   reset_on_eval: false
+  max_replay_size: 1048576

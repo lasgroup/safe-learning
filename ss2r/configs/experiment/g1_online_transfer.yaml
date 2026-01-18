@@ -11,7 +11,7 @@ training:
   render: false
   num_evals: 25
   num_timesteps: 25000
-  wandb_id: bmzztihk
+  wandb_id: ne1qq0zy
 
 
 environment:

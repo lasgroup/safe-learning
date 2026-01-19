@@ -6,7 +6,7 @@ defaults:
 
 training:
   num_timesteps: 25000
-  wandb_id: 9tt8ewww
+  wandb_id: 7qm6mozf
 
 agent:
   batch_size: 256

@@ -2,6 +2,7 @@
 defaults:
   - rccar_hardware
   - override /agent/data_collection: episodic
+  - override /agent/penalizer: lagrangian
   - _self_
 
 training:

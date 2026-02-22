@@ -52,6 +52,16 @@ def _as_obs_shapes(
             shapes[k] = tuple(int(x) for x in shape)
         elif isinstance(shape, list):
             shapes[k] = tuple(int(x) for x in shape)
+        elif isinstance(shape, Mapping) and "shape" in shape:
+            raw_shape = shape["shape"]
+            if isinstance(raw_shape, tuple):
+                shapes[k] = tuple(int(x) for x in raw_shape)
+            elif isinstance(raw_shape, list):
+                shapes[k] = tuple(int(x) for x in raw_shape)
+            else:
+                raise TypeError(
+                    f"Unsupported serialized shape for key {k}: {raw_shape}"
+                )
         else:
             raise TypeError(f"Unsupported observation shape for key {k}: {shape}")
     return shapes
@@ -90,7 +100,7 @@ def convert_checkpoint_to_onnx(
     if not isinstance(observation_size, dict):
         raise TypeError("Checkpoint observation_size must be a mapping for vision PPO.")
     obs_shapes = _as_obs_shapes(observation_size)
-    pixel_obs_keys = tuple(k for k in obs_shapes if k.startswith("pixels/"))
+    pixel_obs_keys = tuple(k for k in observation_size if k.startswith("pixels/"))
     if not pixel_obs_keys:
         raise ValueError(
             "No pixel observation keys found in checkpoint observation_size."
@@ -126,18 +136,37 @@ def convert_checkpoint_to_onnx(
     make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
 
     state_obs_key = str(network_factory_kwargs.get("policy_obs_key", ""))
-    model_input_shapes = {k: obs_shapes[k] for k in pixel_obs_keys}
+    model_input_shapes: dict[str, tuple[int, ...]] = {}
+    needs_pixel_shape_inference = False
+    for key in pixel_obs_keys:
+        shape = obs_shapes.get(key)
+        if shape is None or len(shape) != 3:
+            needs_pixel_shape_inference = True
+            continue
+        model_input_shapes[key] = shape
     if state_obs_key:
-        if state_obs_key not in obs_shapes:
+        state_shape = obs_shapes.get(state_obs_key)
+        if state_shape is not None:
+            model_input_shapes[state_obs_key] = state_shape
+        elif not needs_pixel_shape_inference:
             raise ValueError(
                 f"state_obs_key='{state_obs_key}' missing from checkpoint observation_size"
             )
-        model_input_shapes[state_obs_key] = obs_shapes[state_obs_key]
+
+    observation_shapes_for_export: dict[str, tuple[int, ...]] | None
+    if needs_pixel_shape_inference:
+        print(
+            "Checkpoint pixel observation shapes are incomplete; "
+            "falling back to exporter shape inference."
+        )
+        observation_shapes_for_export = None
+    else:
+        observation_shapes_for_export = model_input_shapes
 
     model_proto = franka_ppo_to_onnx.convert_policy_to_onnx(
         make_inference_fn=make_inference_fn,
         params=params,
-        observation_shapes=model_input_shapes,
+        observation_shapes=observation_shapes_for_export,
         pixel_obs_keys=pixel_obs_keys,
         state_obs_key=state_obs_key,
         normalise_channels=True,
@@ -164,10 +193,24 @@ def convert_checkpoint_to_onnx(
     )
     jax_policy = make_inference_fn(params, deterministic=True)
 
+    if observation_shapes_for_export is None:
+        model_input_shapes_for_test: dict[str, tuple[int, ...]] = {}
+        for inp in session.get_inputs():
+            raw_shape = list(inp.shape)[1:]
+            if any((d is None or isinstance(d, str)) for d in raw_shape):
+                raise ValueError(
+                    f"Cannot infer static shape for ONNX input {inp.name}: {inp.shape}. "
+                    "Run without --num_tests or provide a checkpoint with full "
+                    "observation shapes."
+                )
+            model_input_shapes_for_test[inp.name] = tuple(int(d) for d in raw_shape)
+    else:
+        model_input_shapes_for_test = model_input_shapes
+
     rng = np.random.default_rng(0)
     max_err = 0.0
     for i in range(num_tests):
-        obs = _build_random_obs(rng, model_input_shapes)
+        obs = _build_random_obs(rng, model_input_shapes_for_test)
         onnx_action = session.run(["continuous_actions"], obs)[0][0]
         jax_obs = {k: jax.numpy.asarray(v) for k, v in obs.items()}
         jax_action = np.asarray(jax_policy(jax_obs, jax.random.PRNGKey(i))[0][0])

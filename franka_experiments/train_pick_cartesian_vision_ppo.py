@@ -60,6 +60,8 @@ def _build_env_and_cfg():
     episode_length = int(4 / env_cfg.ctrl_dt)
 
     overrides = {
+        "use_ball": False,
+        "use_x": False,
         "episode_length": episode_length,
         "vision": True,
         "obs_noise.brightness": [0.75, 2.0],

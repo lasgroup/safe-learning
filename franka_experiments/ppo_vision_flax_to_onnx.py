@@ -1,8 +1,15 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Mapping
+
 import jax
 import numpy as np
+from brax.training.acme import running_statistics
+from brax.training.agents.ppo import checkpoint as ppo_checkpoint
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import networks_vision as ppo_networks_vision
-from flax import linen
 
 from ss2r.algorithms.ppo import franka_ppo_to_onnx
 
@@ -12,6 +19,43 @@ except ImportError:
     ort = None
 
 
+def _resolve_checkpoint_dir(path_str: str) -> Path:
+    path = Path(path_str).expanduser().resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Checkpoint path does not exist: {path}")
+
+    config_name = "ppo_network_config.json"
+    if (path / config_name).exists():
+        return path
+
+    candidates = [
+        p for p in path.iterdir() if p.is_dir() and (p / config_name).exists()
+    ]
+    if not candidates:
+        raise FileNotFoundError(
+            f"No checkpoint step with {config_name} found under: {path}"
+        )
+
+    numeric = [p for p in candidates if p.name.isdigit()]
+    if numeric:
+        return max(numeric, key=lambda p: int(p.name))
+    return sorted(candidates)[-1]
+
+
+def _as_obs_shapes(
+    observation_size: Mapping[str, object]
+) -> dict[str, tuple[int, ...]]:
+    shapes: dict[str, tuple[int, ...]] = {}
+    for k, shape in observation_size.items():
+        if isinstance(shape, tuple):
+            shapes[k] = tuple(int(x) for x in shape)
+        elif isinstance(shape, list):
+            shapes[k] = tuple(int(x) for x in shape)
+        else:
+            raise TypeError(f"Unsupported observation shape for key {k}: {shape}")
+    return shapes
+
+
 def _make_ort_session_options():
     opts = ort.SessionOptions()
     opts.intra_op_num_threads = 1
@@ -19,66 +63,139 @@ def _make_ort_session_options():
     return opts
 
 
-def test_policy_to_onnx_export(num_tests: int = 5, atol: float = 1e-4):
-    obs_shape = (64, 64, 1)
-    action_size = 3
+def _build_random_obs(
+    rng: np.random.Generator, obs_shapes: Mapping[str, tuple[int, ...]]
+) -> dict[str, np.ndarray]:
+    return {
+        k: rng.standard_normal((1, *shape), dtype=np.float32)
+        for k, shape in obs_shapes.items()
+    }
+
+
+def convert_checkpoint_to_onnx(
+    checkpoint_path: str,
+    output_path: str | None = None,
+    num_tests: int = 0,
+    atol: float = 1e-4,
+) -> Path:
+    ckpt_dir = _resolve_checkpoint_dir(checkpoint_path)
+    print(f"Using PPO checkpoint: {ckpt_dir}")
+
+    params = ppo_checkpoint.load(ckpt_dir)
+    config = ppo_checkpoint.load_config(ckpt_dir)
+    config_dict = config.to_dict()
+
+    observation_size = config_dict.get("observation_size")
+    if not isinstance(observation_size, dict):
+        raise TypeError("Checkpoint observation_size must be a mapping for vision PPO.")
+    obs_shapes = _as_obs_shapes(observation_size)
+    pixel_obs_keys = tuple(k for k in obs_shapes if k.startswith("pixels/"))
+    if not pixel_obs_keys:
+        raise ValueError(
+            "No pixel observation keys found in checkpoint observation_size."
+        )
+
+    network_factory_kwargs = config_dict.get("network_factory_kwargs", {})
+    if not isinstance(network_factory_kwargs, dict):
+        network_factory_kwargs = {}
+
+    normalize = (
+        running_statistics.normalize
+        if bool(config_dict.get("normalize_observations", False))
+        else (lambda x, y: x)
+    )
     ppo_network = ppo_networks_vision.make_ppo_networks_vision(
-        observation_size={"pixels/view_0": obs_shape, "state": (10,)},
-        action_size=action_size,
-        policy_hidden_layer_sizes=(256, 256),
-        value_hidden_layer_sizes=(256, 256),
-        activation=linen.relu,
+        observation_size=observation_size,
+        action_size=int(config_dict["action_size"]),
+        preprocess_observations_fn=normalize,
+        **network_factory_kwargs,
+    )
+    make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
+
+    state_obs_key = str(network_factory_kwargs.get("policy_obs_key", ""))
+    model_proto = franka_ppo_to_onnx.convert_policy_to_onnx(
+        make_inference_fn=make_inference_fn,
+        params=params,
+        observation_shapes=obs_shapes,
+        pixel_obs_keys=pixel_obs_keys,
+        state_obs_key=state_obs_key,
         normalise_channels=True,
     )
-    policy_params = ppo_network.policy_network.init(jax.random.PRNGKey(0))
-    make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
-    try:
-        model_proto = franka_ppo_to_onnx.convert_policy_to_onnx(
-            make_inference_fn=make_inference_fn,
-            params=(None, policy_params, None),
-            observation_shapes={"pixels/view_0": obs_shape},
-            pixel_obs_keys=("pixels/view_0",),
-            state_obs_key="",
-            normalise_channels=True,
-        )
-    except ImportError as exc:
-        print(f"Skipping export: {exc}")
-        return
 
+    if output_path is None:
+        output_file = ckpt_dir / "policy.onnx"
+    else:
+        output_file = Path(output_path).expanduser().resolve()
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_bytes(model_proto.SerializeToString())
+    print(f"Wrote ONNX model: {output_file}")
+
+    if num_tests <= 0:
+        return output_file
     if ort is None:
-        print("Skipping ONNX runtime parity check: onnxruntime is not installed.")
-        return
+        print("onnxruntime not installed, skipping parity checks.")
+        return output_file
 
     session = ort.InferenceSession(
         model_proto.SerializeToString(),
         sess_options=_make_ort_session_options(),
         providers=["CPUExecutionProvider"],
     )
-    jax_policy = make_inference_fn((None, policy_params, None), deterministic=True)
+    jax_policy = make_inference_fn(params, deterministic=True)
 
     rng = np.random.default_rng(0)
     max_err = 0.0
     for i in range(num_tests):
-        obs = {"pixels/view_0": rng.standard_normal((1, *obs_shape), dtype=np.float32)}
+        obs = _build_random_obs(rng, obs_shapes)
         onnx_action = session.run(["continuous_actions"], obs)[0][0]
-        jax_action = np.asarray(
-            jax_policy(
-                {"pixels/view_0": jax.numpy.asarray(obs["pixels/view_0"])},
-                jax.random.PRNGKey(i),
-            )[0][0]
-        )
+        jax_obs = {k: jax.numpy.asarray(v) for k, v in obs.items()}
+        jax_action = np.asarray(jax_policy(jax_obs, jax.random.PRNGKey(i))[0][0])
         err = float(np.max(np.abs(onnx_action - jax_action)))
         max_err = max(max_err, err)
         print(f"sample={i} max_abs_err={err:.6e}")
-        print(f"  jax : {jax_action}")
-        print(f"  onnx: {onnx_action}")
 
     print(f"overall max_abs_err={max_err:.6e} (atol={atol:.1e})")
     if max_err > atol:
         raise AssertionError(
             f"ONNX/JAX mismatch: max_abs_err={max_err:.6e} > atol={atol}"
         )
+    return output_file
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Convert PPO vision policy checkpoint to ONNX."
+    )
+    parser.add_argument(
+        "--checkpoint_path",
+        required=True,
+        help="Checkpoint step directory or parent directory containing step subdirs.",
+    )
+    parser.add_argument(
+        "--output_path",
+        default=None,
+        help="Output ONNX file path (default: <checkpoint_dir>/policy.onnx).",
+    )
+    parser.add_argument(
+        "--num_tests",
+        type=int,
+        default=0,
+        help="Number of ONNX-vs-JAX parity tests to run.",
+    )
+    parser.add_argument(
+        "--atol",
+        type=float,
+        default=1e-4,
+        help="Absolute tolerance for parity checks.",
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    test_policy_to_onnx_export()
+    args = _parse_args()
+    convert_checkpoint_to_onnx(
+        checkpoint_path=args.checkpoint_path,
+        output_path=args.output_path,
+        num_tests=args.num_tests,
+        atol=args.atol,
+    )

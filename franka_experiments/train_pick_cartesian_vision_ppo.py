@@ -13,9 +13,9 @@ import functools
 from datetime import datetime
 from typing import Any
 
+import brax.training.agents.ppo.train as brax_ppo_train
 from absl import app, flags
 from brax.training.agents.ppo import networks_vision as ppo_networks_vision
-from brax.training.agents.ppo import train as ppo
 from flax import linen
 from ml_collections import config_dict
 from mujoco_playground.config import manipulation_params
@@ -110,6 +110,7 @@ def _build_env_and_cfg():
 def main(argv):
     del argv
 
+    print(f"Using Brax PPO trainer from: {brax_ppo_train.__file__}")
     train_env, episode_length = _build_env_and_cfg()
     num_envs = _NUM_ENVS.value
 
@@ -140,15 +141,17 @@ def main(argv):
             )
         times.append(datetime.now())
 
-    train_fn = functools.partial(
-        ppo.train,
-        augment_pixels=True,
-        wrap_env=False,
-        madrona_backend=True,
-        progress_fn=progress,
-        seed=_SEED.value,
-        **dict(ppo_params),
+    train_kwargs = dict(ppo_params)
+    train_kwargs.update(
+        {
+            "augment_pixels": True,
+            "wrap_env": False,
+            "madrona_backend": True,
+            "progress_fn": progress,
+            "seed": _SEED.value,
+        }
     )
+    train_fn = functools.partial(brax_ppo_train.train, **train_kwargs)
 
     _ = train_fn(environment=train_env, eval_env=None)
     if len(times) > 1:

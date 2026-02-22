@@ -20,41 +20,6 @@ except ImportError:
     ort = None
 
 
-def _extract_policy_params(params):
-    if isinstance(params, (tuple, list)):
-        if len(params) < 2:
-            raise ValueError("Expected params as (normalizer, policy, value) tuple.")
-        policy_params = params[1]
-    else:
-        policy_params = params
-    if isinstance(policy_params, Mapping) and "params" in policy_params:
-        policy_params = policy_params["params"]
-    if not isinstance(policy_params, Mapping):
-        raise TypeError("Could not extract policy parameter mapping.")
-    return policy_params
-
-
-def _sorted_cnn_names(policy_params: Mapping[str, object]) -> list[str]:
-    cnn_names = [k for k in policy_params.keys() if k.startswith("CNN_")]
-    cnn_names.sort(key=lambda x: int(x.split("_")[-1]))
-    return cnn_names
-
-
-def _extract_running_stats_shapes(params) -> dict[str, tuple[int, ...]]:
-    if not isinstance(params, (tuple, list)) or not params:
-        return {}
-    running_stats = params[0]
-    mean = getattr(running_stats, "mean", None)
-    if not isinstance(mean, Mapping):
-        return {}
-
-    shapes: dict[str, tuple[int, ...]] = {}
-    for key, value in mean.items():
-        arr = np.asarray(value)
-        shapes[str(key)] = tuple(int(d) for d in arr.shape)
-    return shapes
-
-
 def _resolve_checkpoint_dir(path_str: str) -> Path:
     path = Path(path_str).expanduser().resolve()
     if not path.exists():
@@ -64,36 +29,87 @@ def _resolve_checkpoint_dir(path_str: str) -> Path:
     if (path / config_name).exists():
         return path
 
-    candidates = [
-        p for p in path.iterdir() if p.is_dir() and (p / config_name).exists()
-    ]
-    if not candidates:
+    step_dirs = [p for p in path.iterdir() if p.is_dir() and (p / config_name).exists()]
+    if not step_dirs:
         raise FileNotFoundError(
             f"No checkpoint step with {config_name} found under: {path}"
         )
 
-    numeric = [p for p in candidates if p.name.isdigit()]
+    numeric = [p for p in step_dirs if p.name.isdigit()]
     if numeric:
         return max(numeric, key=lambda p: int(p.name))
-    return sorted(candidates)[-1]
+    return sorted(step_dirs)[-1]
 
 
-def _as_obs_shapes(
-    observation_size: Mapping[str, object]
-) -> dict[str, tuple[int, ...]]:
-    def _shape_to_tuple(raw_shape: object, key: str) -> tuple[int, ...]:
-        if isinstance(raw_shape, tuple):
-            return tuple(int(x) for x in raw_shape)
-        if isinstance(raw_shape, list):
-            return tuple(int(x) for x in raw_shape)
-        if isinstance(raw_shape, Mapping) and "shape" in raw_shape:
-            return _shape_to_tuple(raw_shape["shape"], key)
-        raise TypeError(f"Unsupported serialized shape for key {key}: {raw_shape}")
+def _shape_tuple(raw: object) -> tuple[int, ...]:
+    if isinstance(raw, tuple):
+        return tuple(int(x) for x in raw)
+    if isinstance(raw, list):
+        return tuple(int(x) for x in raw)
+    if isinstance(raw, Mapping) and "shape" in raw:
+        return _shape_tuple(raw["shape"])
+    raise TypeError(f"Unsupported shape payload: {raw}")
 
-    shapes: dict[str, tuple[int, ...]] = {}
-    for k, shape in observation_size.items():
-        shapes[k] = _shape_to_tuple(shape, k)
-    return shapes
+
+def _extract_policy_params(params) -> Mapping[str, object]:
+    policy_params = params[1] if isinstance(params, (tuple, list)) else params
+    if isinstance(policy_params, Mapping) and "params" in policy_params:
+        policy_params = policy_params["params"]
+    if not isinstance(policy_params, Mapping):
+        raise TypeError("Could not extract policy parameter mapping.")
+    return policy_params
+
+
+def _extract_pixel_obs_shapes(
+    observation_size_cfg: Mapping[str, object],
+    policy_params: Mapping[str, object],
+) -> tuple[tuple[str, ...], dict[str, tuple[int, ...]]]:
+    pixel_obs_keys = tuple(k for k in observation_size_cfg if k.startswith("pixels/"))
+    if not pixel_obs_keys:
+        raise ValueError(
+            "No pixel observation keys found in checkpoint observation_size."
+        )
+
+    obs_shapes: dict[str, tuple[int, ...]] = {}
+    for i, key in enumerate(pixel_obs_keys):
+        try:
+            shape = _shape_tuple(observation_size_cfg[key])
+        except Exception:
+            shape = ()
+
+        if len(shape) == 3:
+            obs_shapes[key] = shape
+            continue
+
+        channels = int(
+            np.asarray(policy_params[f"CNN_{i}"]["Conv_0"]["kernel"]).shape[2]  # type: ignore[index]
+        )
+        obs_shapes[key] = (64, 64, channels)
+
+    return pixel_obs_keys, obs_shapes
+
+
+def _extract_state_shape(
+    observation_size_cfg: Mapping[str, object],
+    params,
+) -> tuple[int, ...]:
+    if isinstance(params, (tuple, list)) and params:
+        running_stats = params[0]
+        mean = getattr(running_stats, "mean", None)
+        if isinstance(mean, Mapping) and "state" in mean:
+            shape = tuple(int(d) for d in np.asarray(mean["state"]).shape)  # type: ignore
+            if shape:
+                return shape
+
+    if "state" in observation_size_cfg:
+        try:
+            shape = _shape_tuple(observation_size_cfg["state"])
+            if shape:
+                return shape
+        except Exception:
+            pass
+
+    return (1,)
 
 
 def _make_ort_session_options():
@@ -103,58 +119,26 @@ def _make_ort_session_options():
     return opts
 
 
+def _onnx_input_shapes(session: "ort.InferenceSession") -> dict[str, tuple[int, ...]]:
+    shapes: dict[str, tuple[int, ...]] = {}
+    for inp in session.get_inputs():
+        raw_shape = list(inp.shape)[1:]
+        if any((d is None or isinstance(d, str)) for d in raw_shape):
+            raise ValueError(
+                f"Cannot infer static shape for ONNX input {inp.name}: {inp.shape}."
+            )
+        shapes[inp.name] = tuple(int(d) for d in raw_shape)
+    return shapes
+
+
 def _build_random_obs(
-    rng: np.random.Generator, obs_shapes: Mapping[str, tuple[int, ...]]
+    rng: np.random.Generator,
+    obs_shapes: Mapping[str, tuple[int, ...]],
 ) -> dict[str, np.ndarray]:
     return {
         k: rng.standard_normal((1, *shape), dtype=np.float32)
         for k, shape in obs_shapes.items()
     }
-
-
-def _sanitize_observation_size_for_network(
-    raw_observation_size: Mapping[str, object],
-    params,
-    pixel_obs_keys: tuple[str, ...],
-    state_obs_keys: tuple[str, ...],
-) -> dict[str, tuple[int, ...]]:
-    obs_shapes = _as_obs_shapes(raw_observation_size)
-    running_stats_shapes = _extract_running_stats_shapes(params)
-    sanitized: dict[str, tuple[int, ...]] = {}
-    for key, shape in obs_shapes.items():
-        if key in pixel_obs_keys:
-            sanitized[key] = shape
-            continue
-        running_shape = running_stats_shapes.get(key)
-        if running_shape is not None and (shape == (1,) or shape != running_shape):
-            sanitized[key] = running_shape
-        else:
-            sanitized[key] = shape
-
-    for key in state_obs_keys:
-        if not key:
-            continue
-        if key not in sanitized and key in running_stats_shapes:
-            sanitized[key] = running_stats_shapes[key]
-
-    policy_params = _extract_policy_params(params)
-    cnn_names = _sorted_cnn_names(policy_params)
-
-    if len(cnn_names) != len(pixel_obs_keys):
-        raise ValueError(
-            f"Checkpoint CNN count ({len(cnn_names)}) does not match pixel keys "
-            f"({len(pixel_obs_keys)}): {pixel_obs_keys}"
-        )
-
-    for i, key in enumerate(pixel_obs_keys):
-        shape = sanitized.get(key)
-        if shape is not None and len(shape) == 3:
-            continue
-        in_channels = int(
-            np.asarray(policy_params[cnn_names[i]]["Conv_0"]["kernel"]).shape[2]  # type: ignore[index]
-        )
-        sanitized[key] = (64, 64, in_channels)
-    return sanitized
 
 
 def convert_checkpoint_to_onnx(
@@ -170,103 +154,58 @@ def convert_checkpoint_to_onnx(
     config = ppo_checkpoint.load_config(ckpt_dir)
     config_dict = config.to_dict()
 
-    observation_size = config_dict.get("observation_size")
-    if not isinstance(observation_size, dict):
+    observation_size_cfg = config_dict.get("observation_size")
+    if not isinstance(observation_size_cfg, dict):
         raise TypeError("Checkpoint observation_size must be a mapping for vision PPO.")
-    pixel_obs_keys = tuple(k for k in observation_size if k.startswith("pixels/"))
-    if not pixel_obs_keys:
-        raise ValueError(
-            "No pixel observation keys found in checkpoint observation_size."
-        )
+
+    policy_params = _extract_policy_params(params)
+    pixel_obs_keys, network_obs_shapes = _extract_pixel_obs_shapes(
+        observation_size_cfg, policy_params
+    )
 
     network_factory_kwargs = config_dict.get("network_factory_kwargs", {})
     if not isinstance(network_factory_kwargs, dict):
         network_factory_kwargs = {}
     network_factory_kwargs = dict(network_factory_kwargs)
-    activation_name = network_factory_kwargs.pop("activation_name", "")
-    activation = None
-    if activation_name:
-        activation = getattr(linen, activation_name, None)
-        if activation is None:
-            raise ValueError(
-                f"Unsupported activation_name in checkpoint: {activation_name!r}"
-            )
 
-    state_obs_key = str(network_factory_kwargs.get("policy_obs_key", ""))
-    value_state_obs_key = str(network_factory_kwargs.get("value_obs_key", ""))
-    required_obs_keys = set(pixel_obs_keys)
-    if state_obs_key:
-        required_obs_keys.add(state_obs_key)
-    if value_state_obs_key:
-        required_obs_keys.add(value_state_obs_key)
-    filtered_observation_size = {
-        key: observation_size[key]
-        for key in required_obs_keys
-        if key in observation_size
-    }
-    missing_required_keys = sorted(required_obs_keys - set(filtered_observation_size))
-    if missing_required_keys:
+    activation_name = str(network_factory_kwargs.pop("activation_name", ""))
+    activation = getattr(linen, activation_name, None) if activation_name else None
+    if activation_name and activation is None:
         raise ValueError(
-            "Checkpoint observation_size is missing required keys: "
-            + ", ".join(missing_required_keys)
+            f"Unsupported activation_name in checkpoint: {activation_name!r}"
         )
+
+    # Force pixel-only policy reconstruction.
+    network_factory_kwargs["policy_obs_key"] = ""
+    network_factory_kwargs["value_obs_key"] = ""
 
     normalize = (
         running_statistics.normalize
         if bool(config_dict.get("normalize_observations", False))
         else (lambda x, y: x)
     )
-    observation_size_for_network = _sanitize_observation_size_for_network(
-        filtered_observation_size,
-        params,
-        pixel_obs_keys,
-        (state_obs_key, value_state_obs_key),
-    )
+
     ppo_network_kwargs = dict(network_factory_kwargs)
     if activation is not None:
         ppo_network_kwargs["activation"] = activation
+
     ppo_network = ppo_networks_vision.make_ppo_networks_vision(
-        observation_size=observation_size_for_network,
+        observation_size=network_obs_shapes,
         action_size=int(config_dict["action_size"]),
         preprocess_observations_fn=normalize,
         **ppo_network_kwargs,
     )
     make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
 
-    obs_shapes = observation_size_for_network
-    model_input_shapes: dict[str, tuple[int, ...]] = {}
-    needs_pixel_shape_inference = False
-    for key in pixel_obs_keys:
-        shape = obs_shapes.get(key)
-        if shape is None or len(shape) != 3:
-            needs_pixel_shape_inference = True
-            continue
-        model_input_shapes[key] = shape
-    if state_obs_key:
-        state_shape = obs_shapes.get(state_obs_key)
-        if state_shape is not None:
-            model_input_shapes[state_obs_key] = state_shape
-        elif not needs_pixel_shape_inference:
-            raise ValueError(
-                f"state_obs_key='{state_obs_key}' missing from checkpoint observation_size"
-            )
-
-    observation_shapes_for_export: dict[str, tuple[int, ...]] | None
-    if needs_pixel_shape_inference:
-        print(
-            "Checkpoint pixel observation shapes are incomplete; "
-            "falling back to exporter shape inference."
-        )
-        observation_shapes_for_export = None
-    else:
-        observation_shapes_for_export = model_input_shapes
+    export_obs_shapes = dict(network_obs_shapes)
+    export_obs_shapes["state"] = _extract_state_shape(observation_size_cfg, params)
 
     model_proto = franka_ppo_to_onnx.convert_policy_to_onnx(
         make_inference_fn=make_inference_fn,
         params=params,
-        observation_shapes=observation_shapes_for_export,
+        observation_shapes=export_obs_shapes,
         pixel_obs_keys=pixel_obs_keys,
-        state_obs_key=state_obs_key,
+        state_obs_key="",
         normalise_channels=True,
     )
 
@@ -289,28 +228,18 @@ def convert_checkpoint_to_onnx(
         sess_options=_make_ort_session_options(),
         providers=["CPUExecutionProvider"],
     )
+    onnx_shapes = _onnx_input_shapes(session)
     jax_policy = make_inference_fn(params, deterministic=True)
-
-    if observation_shapes_for_export is None:
-        model_input_shapes_for_test: dict[str, tuple[int, ...]] = {}
-        for inp in session.get_inputs():
-            raw_shape = list(inp.shape)[1:]
-            if any((d is None or isinstance(d, str)) for d in raw_shape):
-                raise ValueError(
-                    f"Cannot infer static shape for ONNX input {inp.name}: {inp.shape}. "
-                    "Run without --num_tests or provide a checkpoint with full "
-                    "observation shapes."
-                )
-            model_input_shapes_for_test[inp.name] = tuple(int(d) for d in raw_shape)
-    else:
-        model_input_shapes_for_test = model_input_shapes
+    jax_input_keys = set(network_obs_shapes)
 
     rng = np.random.default_rng(0)
     max_err = 0.0
     for i in range(num_tests):
-        obs = _build_random_obs(rng, model_input_shapes_for_test)
+        obs = _build_random_obs(rng, onnx_shapes)
         onnx_action = session.run(["continuous_actions"], obs)[0][0]
-        jax_obs = {k: jax.numpy.asarray(v) for k, v in obs.items()}
+        jax_obs = {
+            k: jax.numpy.asarray(v) for k, v in obs.items() if k in jax_input_keys
+        }
         jax_action = np.asarray(jax_policy(jax_obs, jax.random.PRNGKey(i))[0][0])
         err = float(np.max(np.abs(onnx_action - jax_action)))
         max_err = max(max_err, err)
@@ -321,6 +250,7 @@ def convert_checkpoint_to_onnx(
         raise AssertionError(
             f"ONNX/JAX mismatch: max_abs_err={max_err:.6e} > atol={atol}"
         )
+
     return output_file
 
 

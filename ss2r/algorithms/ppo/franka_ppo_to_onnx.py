@@ -126,7 +126,7 @@ if tf is not None and layers is not None:
             self.action_size = action_size
             self.pixel_obs_keys = tuple(pixel_obs_keys)
             self.normalise_channels = normalise_channels
-            self.state_obs_key = state_obs_key
+            del state_obs_key  # state is intentionally not used by this policy.
 
             self.cnn_blocks = []
             for i, _ in enumerate(self.pixel_obs_keys):
@@ -193,12 +193,10 @@ if tf is not None and layers is not None:
                 hidden = tf.reduce_mean(hidden, axis=(1, 2))
                 cnn_outs.append(hidden)
 
-            if self.state_obs_key:
-                cnn_outs.append(obs[self.state_obs_key])
-
             logits = self.mlp_block(tf.concat(cnn_outs, axis=-1))
             loc, _ = tf.split(logits, 2, axis=-1)
-            return tf.tanh(loc)
+            action = tf.tanh(loc)
+            return action
 
 else:
 
@@ -264,24 +262,21 @@ def convert_policy_to_onnx(
         )
 
     if observation_shapes is None:
-        h, w = _resolve_render_hw(cfg)
         observation_shapes = {}
-        for i, key in enumerate(pixel_obs_keys):
-            channels = int(
-                np.asarray(policy_params[f"CNN_{i}"]["Conv_0"]["kernel"]).shape[2]  # type: ignore
-            )
-            observation_shapes[key] = (h, w, channels)
+    else:
+        observation_shapes = dict(observation_shapes)
 
-    used_observation_shapes = {k: tuple(observation_shapes[k]) for k in pixel_obs_keys}
-    if state_obs_key:
-        if state_obs_key not in observation_shapes:
-            raise ValueError(
-                f"state_obs_key='{state_obs_key}' not found in observation_shapes keys="
-                f"{list(observation_shapes.keys())}"
-            )
-        used_observation_shapes[state_obs_key] = tuple(
-            observation_shapes[state_obs_key]
+    h, w = _resolve_render_hw(cfg)
+    used_observation_shapes: dict[str, tuple[int, ...]] = {}
+    for i, key in enumerate(pixel_obs_keys):
+        if key in observation_shapes:
+            used_observation_shapes[key] = tuple(observation_shapes[key])
+            continue
+        channels = int(
+            np.asarray(policy_params[f"CNN_{i}"]["Conv_0"]["kernel"]).shape[2]  # type: ignore
         )
+        used_observation_shapes[key] = (h, w, channels)
+    del state_obs_key  # state is intentionally never passed to the policy network.
 
     tf_policy_network = VisionPPOPolicy(
         action_size=action_size,
@@ -289,18 +284,24 @@ def convert_policy_to_onnx(
         hidden_layer_sizes=hidden_layers,
         activation=activation,
         normalise_channels=normalise_channels,
-        state_obs_key=state_obs_key,
     )
 
+    model_input_shapes = dict(used_observation_shapes)
+    if "state" in observation_shapes:
+        model_input_shapes["state"] = tuple(observation_shapes["state"])
     dummy_obs = {
         k: np.ones((1, *shape), dtype=np.float32)
-        for k, shape in used_observation_shapes.items()
+        for k, shape in model_input_shapes.items()
     }
     tf_policy_network(dummy_obs).numpy()
     transfer_weights(policy_params, tf_policy_network)
 
     inference_fn = make_inference_fn(params, deterministic=True)
-    jax_obs = {k: jax.numpy.asarray(v) for k, v in dummy_obs.items()}
+    jax_obs = {
+        k: jax.numpy.asarray(v)
+        for k, v in dummy_obs.items()
+        if k in used_observation_shapes
+    }
     jax_pred = np.asarray(inference_fn(jax_obs, jax.random.PRNGKey(0))[0][0])
     tf_pred = np.asarray(tf_policy_network(dummy_obs).numpy()[0])
     max_abs_err = float(np.max(np.abs(jax_pred - tf_pred)))
@@ -312,7 +313,7 @@ def convert_policy_to_onnx(
         input_signature=[
             {
                 k: tf.TensorSpec([1, *shape], tf.float32, name=k)
-                for k, shape in used_observation_shapes.items()
+                for k, shape in model_input_shapes.items()
             }
         ],
         opset=11,

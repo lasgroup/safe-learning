@@ -18,10 +18,12 @@ from brax.training.agents.ppo import networks_vision as ppo_networks_vision
 from brax.training.agents.ppo import train as ppo
 from flax import linen
 from ml_collections import config_dict
-from mujoco_playground import registry
 from mujoco_playground.config import manipulation_params
 
 from ss2r import benchmark_suites
+from ss2r.benchmark_suites.mujoco_playground.pick_cartesian import (
+    pick_cartesian as pick_cartesian_task,
+)
 
 _ENV_NAME = "PandaPickCubeCartesianExtended"
 _BASE_CONFIG_ENV_NAME = "PandaPickCubeCartesian"
@@ -54,7 +56,7 @@ def _set_nested(cfg: config_dict.ConfigDict, key: str, value: Any) -> None:
 
 def _build_env_and_cfg():
     num_envs = _NUM_ENVS.value
-    env_cfg = registry.get_default_config(_ENV_NAME)
+    env_cfg = pick_cartesian_task.default_config()
     episode_length = int(4 / env_cfg.ctrl_dt)
 
     overrides = {

@@ -10,6 +10,7 @@ from brax.training.acme import running_statistics
 from brax.training.agents.ppo import checkpoint as ppo_checkpoint
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import networks_vision as ppo_networks_vision
+from flax import linen
 
 from ss2r.algorithms.ppo import franka_ppo_to_onnx
 
@@ -98,17 +99,29 @@ def convert_checkpoint_to_onnx(
     network_factory_kwargs = config_dict.get("network_factory_kwargs", {})
     if not isinstance(network_factory_kwargs, dict):
         network_factory_kwargs = {}
+    network_factory_kwargs = dict(network_factory_kwargs)
+    activation_name = network_factory_kwargs.pop("activation_name", "")
+    activation = None
+    if activation_name:
+        activation = getattr(linen, activation_name, None)
+        if activation is None:
+            raise ValueError(
+                f"Unsupported activation_name in checkpoint: {activation_name!r}"
+            )
 
     normalize = (
         running_statistics.normalize
         if bool(config_dict.get("normalize_observations", False))
         else (lambda x, y: x)
     )
+    ppo_network_kwargs = dict(network_factory_kwargs)
+    if activation is not None:
+        ppo_network_kwargs["activation"] = activation
     ppo_network = ppo_networks_vision.make_ppo_networks_vision(
         observation_size=observation_size,
         action_size=int(config_dict["action_size"]),
         preprocess_observations_fn=normalize,
-        **network_factory_kwargs,
+        **ppo_network_kwargs,
     )
     make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
 

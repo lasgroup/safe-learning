@@ -52,6 +52,36 @@ _USE_RASTERIZER = flags.DEFINE_boolean(
 )
 
 
+def _make_ppo_networks_vision_ckpt_compatible(
+    observation_size,
+    action_size,
+    preprocess_observations_fn,
+    policy_hidden_layer_sizes=(256, 256),
+    value_hidden_layer_sizes=(256, 256),
+    normalise_channels=False,
+    policy_obs_key="",
+    value_obs_key="",
+    activation_name: str = "relu",
+):
+    # FIXME: Brax checkpoint.network_config rejects non-default `activation` kwargs.
+    # Route activation through `activation_name` so checkpoints can be saved while
+    # still building the ReLU network used in this experiment.
+    activation = getattr(linen, activation_name, None)
+    if activation is None:
+        raise ValueError(f"Unsupported activation_name={activation_name!r}")
+    return ppo_networks_vision.make_ppo_networks_vision(
+        observation_size=observation_size,
+        action_size=action_size,
+        preprocess_observations_fn=preprocess_observations_fn,
+        policy_hidden_layer_sizes=policy_hidden_layer_sizes,
+        value_hidden_layer_sizes=value_hidden_layer_sizes,
+        activation=activation,
+        normalise_channels=normalise_channels,
+        policy_obs_key=policy_obs_key,
+        value_obs_key=value_obs_key,
+    )
+
+
 def _set_nested(cfg: config_dict.ConfigDict, key: str, value: Any) -> None:
     keys = key.split(".")
     node = cfg
@@ -132,10 +162,10 @@ def main(argv):
     num_envs = _NUM_ENVS.value
 
     network_factory = functools.partial(
-        ppo_networks_vision.make_ppo_networks_vision,
+        _make_ppo_networks_vision_ckpt_compatible,
         policy_hidden_layer_sizes=[256, 256],
         value_hidden_layer_sizes=[256, 256],
-        activation=linen.relu,
+        activation_name="relu",
         normalise_channels=True,
     )
 

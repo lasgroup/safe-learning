@@ -113,10 +113,18 @@ def convert_checkpoint_to_onnx(
     make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
 
     state_obs_key = str(network_factory_kwargs.get("policy_obs_key", ""))
+    model_input_shapes = {k: obs_shapes[k] for k in pixel_obs_keys}
+    if state_obs_key:
+        if state_obs_key not in obs_shapes:
+            raise ValueError(
+                f"state_obs_key='{state_obs_key}' missing from checkpoint observation_size"
+            )
+        model_input_shapes[state_obs_key] = obs_shapes[state_obs_key]
+
     model_proto = franka_ppo_to_onnx.convert_policy_to_onnx(
         make_inference_fn=make_inference_fn,
         params=params,
-        observation_shapes=obs_shapes,
+        observation_shapes=model_input_shapes,
         pixel_obs_keys=pixel_obs_keys,
         state_obs_key=state_obs_key,
         normalise_channels=True,
@@ -146,7 +154,7 @@ def convert_checkpoint_to_onnx(
     rng = np.random.default_rng(0)
     max_err = 0.0
     for i in range(num_tests):
-        obs = _build_random_obs(rng, obs_shapes)
+        obs = _build_random_obs(rng, model_input_shapes)
         onnx_action = session.run(["continuous_actions"], obs)[0][0]
         jax_obs = {k: jax.numpy.asarray(v) for k, v in obs.items()}
         jax_action = np.asarray(jax_policy(jax_obs, jax.random.PRNGKey(i))[0][0])

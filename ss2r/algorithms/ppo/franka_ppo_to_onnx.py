@@ -272,6 +272,17 @@ def convert_policy_to_onnx(
             )
             observation_shapes[key] = (h, w, channels)
 
+    used_observation_shapes = {k: tuple(observation_shapes[k]) for k in pixel_obs_keys}
+    if state_obs_key:
+        if state_obs_key not in observation_shapes:
+            raise ValueError(
+                f"state_obs_key='{state_obs_key}' not found in observation_shapes keys="
+                f"{list(observation_shapes.keys())}"
+            )
+        used_observation_shapes[state_obs_key] = tuple(
+            observation_shapes[state_obs_key]
+        )
+
     tf_policy_network = VisionPPOPolicy(
         action_size=action_size,
         pixel_obs_keys=pixel_obs_keys,
@@ -283,7 +294,7 @@ def convert_policy_to_onnx(
 
     dummy_obs = {
         k: np.ones((1, *shape), dtype=np.float32)
-        for k, shape in observation_shapes.items()
+        for k, shape in used_observation_shapes.items()
     }
     tf_policy_network(dummy_obs).numpy()
     transfer_weights(policy_params, tf_policy_network)
@@ -301,7 +312,7 @@ def convert_policy_to_onnx(
         input_signature=[
             {
                 k: tf.TensorSpec([1, *shape], tf.float32, name=k)
-                for k, shape in observation_shapes.items()
+                for k, shape in used_observation_shapes.items()
             }
         ],
         opset=11,

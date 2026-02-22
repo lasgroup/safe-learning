@@ -1,0 +1,156 @@
+"""Train PPO on PandaPickCubeCartesianExtended from pixels via SS2R env factory.
+
+This script follows the Madrona-MJX tutorial flow:
+1) Build a vision environment with domain randomization.
+2) Train a vision PPO policy.
+3) Print reward metrics during training.
+
+The environment is always created with:
+`ss2r.benchmark_suites.make_mujoco_playground_envs`.
+"""
+
+import functools
+from datetime import datetime
+from typing import Any
+
+from absl import app, flags
+from brax.training.agents.ppo import networks_vision as ppo_networks_vision
+from brax.training.agents.ppo import train as ppo
+from flax import linen
+from ml_collections import config_dict
+from mujoco_playground import registry
+from mujoco_playground.config import manipulation_params
+
+from ss2r import benchmark_suites
+
+_ENV_NAME = "PandaPickCubeCartesianExtended"
+_BASE_CONFIG_ENV_NAME = "PandaPickCubeCartesian"
+
+_NUM_ENVS = flags.DEFINE_integer("num_envs", 1024, "Number of parallel environments")
+_NUM_TIMESTEPS = flags.DEFINE_integer(
+    "num_timesteps", 7_000_000, "Total environment steps for PPO training"
+)
+_SEED = flags.DEFINE_integer("seed", 0, "PRNG seed")
+_TRAIN_DOMAIN_RANDOMIZATION = flags.DEFINE_boolean(
+    "train_domain_randomization", True, "Enable domain randomization for training"
+)
+_EVAL_DOMAIN_RANDOMIZATION = flags.DEFINE_boolean(
+    "eval_domain_randomization", True, "Enable domain randomization for evaluation"
+)
+_RENDER_WIDTH = flags.DEFINE_integer("render_width", 64, "Render width")
+_RENDER_HEIGHT = flags.DEFINE_integer("render_height", 64, "Render height")
+_USE_RASTERIZER = flags.DEFINE_boolean(
+    "use_rasterizer", False, "Use rasterizer backend for rendering"
+)
+
+
+def _set_nested(cfg: config_dict.ConfigDict, key: str, value: Any) -> None:
+    keys = key.split(".")
+    node = cfg
+    for part in keys[:-1]:
+        node = node[part]
+    node[keys[-1]] = value
+
+
+def _build_env_and_cfg():
+    num_envs = _NUM_ENVS.value
+    env_cfg = registry.get_default_config(_ENV_NAME)
+    episode_length = int(4 / env_cfg.ctrl_dt)
+
+    overrides = {
+        "episode_length": episode_length,
+        "vision": True,
+        "obs_noise.brightness": [0.75, 2.0],
+        "vision_config.use_rasterizer": _USE_RASTERIZER.value,
+        "vision_config.render_batch_size": num_envs,
+        "vision_config.render_width": _RENDER_WIDTH.value,
+        "vision_config.render_height": _RENDER_HEIGHT.value,
+        "box_init_range": 0.1,
+        "action_history_length": 5,
+        "success_threshold": 0.03,
+    }
+    for k, v in overrides.items():
+        _set_nested(env_cfg, k, v)
+
+    cfg = config_dict.ConfigDict()
+    cfg.environment = config_dict.ConfigDict()
+    cfg.environment.domain_name = "mujoco_playground"
+    cfg.environment.task_name = _ENV_NAME
+    cfg.environment.task_params = env_cfg.to_dict()
+    cfg.environment.train_params = config_dict.ConfigDict()
+    cfg.environment.eval_params = config_dict.ConfigDict()
+
+    cfg.agent = config_dict.ConfigDict()
+    cfg.agent.use_vision = True
+
+    cfg.training = config_dict.ConfigDict()
+    cfg.training.seed = _SEED.value
+    cfg.training.num_envs = num_envs
+    cfg.training.num_eval_envs = num_envs
+    cfg.training.train_domain_randomization = _TRAIN_DOMAIN_RANDOMIZATION.value
+    cfg.training.eval_domain_randomization = _EVAL_DOMAIN_RANDOMIZATION.value
+    cfg.training.episode_length = episode_length
+    cfg.training.action_repeat = 1
+    cfg.training.hard_resets = False
+    cfg.training.nonepisodic = False
+    cfg.training.action_delay = config_dict.ConfigDict(
+        {"enable": False, "max_delay": 0}
+    )
+
+    train_env, _ = benchmark_suites.make_mujoco_playground_envs(
+        cfg, lambda env: env, lambda env: env
+    )
+    return train_env, episode_length
+
+
+def main(argv):
+    del argv
+
+    train_env, episode_length = _build_env_and_cfg()
+    num_envs = _NUM_ENVS.value
+
+    network_factory = functools.partial(
+        ppo_networks_vision.make_ppo_networks_vision,
+        policy_hidden_layer_sizes=[256, 256],
+        value_hidden_layer_sizes=[256, 256],
+        activation=linen.relu,
+        normalise_channels=True,
+    )
+
+    ppo_params = manipulation_params.brax_vision_ppo_config(_BASE_CONFIG_ENV_NAME)
+    ppo_params.num_timesteps = _NUM_TIMESTEPS.value
+    ppo_params.num_envs = num_envs
+    ppo_params.num_eval_envs = num_envs
+    ppo_params.episode_length = episode_length
+    ppo_params.action_repeat = 1
+    del ppo_params.network_factory
+    ppo_params.network_factory = network_factory
+
+    times = [datetime.now()]
+
+    def progress(num_steps, metrics):
+        if "eval/episode_reward" in metrics:
+            print(
+                f"{num_steps}: eval/episode_reward={metrics['eval/episode_reward']:.3f} "
+                f"+- {metrics.get('eval/episode_reward_std', 0.0):.3f}"
+            )
+        times.append(datetime.now())
+
+    train_fn = functools.partial(
+        ppo.train,
+        augment_pixels=True,
+        wrap_env=False,
+        madrona_backend=True,
+        progress_fn=progress,
+        seed=_SEED.value,
+        **dict(ppo_params),
+    )
+
+    _ = train_fn(environment=train_env, eval_env=None)
+    if len(times) > 1:
+        print(f"time to jit: {times[1] - times[0]}")
+        print(f"time to train: {times[-1] - times[1]}")
+
+
+if __name__ == "__main__":
+    app.run(main)

@@ -6,6 +6,7 @@ from typing import Any
 
 import jax
 import numpy as np
+from brax.training.acme import running_statistics
 
 try:
     import tensorflow as tf
@@ -384,7 +385,26 @@ def convert_policy_to_onnx(
     tf_policy_network(dummy_obs).numpy()
     transfer_weights(policy_params, tf_policy_network)
 
-    inference_fn = make_inference_fn(params, deterministic=True)
+    params_for_inference = params
+    if (
+        isinstance(params, (tuple, list))
+        and len(params) >= 2
+        and params[0] is None
+        and state_obs_key
+        and state_obs_key in observation_shapes
+    ):
+        # Brax vision apply() calls normalizer_select(...) whenever state_obs_key is set.
+        # If caller passes params[0]=None (common in lightweight export tests), build a
+        # neutral running-stats container so the sanity-check inference can run.
+        dummy_state = {
+            state_obs_key: jax.numpy.zeros(
+                observation_shapes[state_obs_key], dtype=jax.numpy.float32
+            )
+        }
+        normalizer_params = running_statistics.init_state(dummy_state)
+        params_for_inference = (normalizer_params, *params[1:])
+
+    inference_fn = make_inference_fn(params_for_inference, deterministic=True)
     jax_obs = {k: jax.numpy.asarray(v) for k, v in dummy_obs.items()}
     jax_pred = np.asarray(inference_fn(jax_obs, jax.random.PRNGKey(0))[0][0])
     tf_pred = np.asarray(tf_policy_network(dummy_obs).numpy()[0])

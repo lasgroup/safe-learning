@@ -22,8 +22,6 @@ def test_policy_to_onnx_export(num_tests: int = 5, atol: float = 1e-4):
         value_hidden_layer_sizes=(256, 256),
         activation=linen.relu,
         normalise_channels=True,
-        policy_obs_key="state",
-        value_obs_key="state",
     )
     policy_params = ppo_network.policy_network.init(jax.random.PRNGKey(0))
     make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
@@ -31,9 +29,9 @@ def test_policy_to_onnx_export(num_tests: int = 5, atol: float = 1e-4):
         model_proto = franka_ppo_to_onnx.convert_policy_to_onnx(
             make_inference_fn=make_inference_fn,
             params=(None, policy_params, None),
-            observation_shapes={"pixels/view_0": obs_shape, "state": (10,)},
+            observation_shapes={"pixels/view_0": obs_shape},
             pixel_obs_keys=("pixels/view_0",),
-            state_obs_key="state",
+            state_obs_key="",
             normalise_channels=True,
         )
     except ImportError as exc:
@@ -53,17 +51,11 @@ def test_policy_to_onnx_export(num_tests: int = 5, atol: float = 1e-4):
     rng = np.random.default_rng(0)
     max_err = 0.0
     for i in range(num_tests):
-        obs = {
-            "pixels/view_0": rng.standard_normal((1, *obs_shape), dtype=np.float32),
-            "state": rng.standard_normal((1, 10), dtype=np.float32),
-        }
+        obs = {"pixels/view_0": rng.standard_normal((1, *obs_shape), dtype=np.float32)}
         onnx_action = session.run(["continuous_actions"], obs)[0][0]
         jax_action = np.asarray(
             jax_policy(
-                {
-                    "pixels/view_0": jax.numpy.asarray(obs["pixels/view_0"]),
-                    "state": jax.numpy.asarray(obs["state"]),
-                },
+                {"pixels/view_0": jax.numpy.asarray(obs["pixels/view_0"])},
                 jax.random.PRNGKey(i),
             )[0][0]
         )

@@ -50,12 +50,6 @@ def _extract_policy_params(params: Any) -> Mapping[str, Any]:
     return policy_params
 
 
-def _extract_normalizer_params(params: Any) -> Any:
-    if isinstance(params, (tuple, list)) and len(params) >= 1:
-        return params[0]
-    return None
-
-
 def _sorted_hidden_keys(mlp_params: Mapping[str, Any]) -> list[str]:
     hidden_keys = [k for k in mlp_params.keys() if k.startswith("hidden_")]
     hidden_keys.sort(key=lambda x: int(x.split("_")[-1]))
@@ -113,52 +107,6 @@ def _resolve_tf_activation(cfg: Any):
     return tf.nn.relu
 
 
-def _resolve_state_obs_key(cfg: Any, fallback: str = "state") -> str:
-    for path in (
-        ("agent", "policy_obs_key"),
-        ("agent", "state_obs_key"),
-        ("agent", "network_factory", "policy_obs_key"),
-    ):
-        key = _get_path(cfg, *path)
-        if isinstance(key, str) and key:
-            return key
-    return fallback
-
-
-def _resolve_normalize_observations(cfg: Any, default: bool = False) -> bool:
-    value = _get_path(cfg, "agent", "normalize_observations")
-    if value is None:
-        return default
-    return bool(value)
-
-
-def _infer_state_obs_dim(policy_params: Mapping[str, Any]) -> int:
-    cnn_names = [k for k in policy_params.keys() if k.startswith("CNN_")]
-    if not cnn_names:
-        return 0
-    input_dim = int(np.asarray(policy_params["MLP_0"]["hidden_0"]["kernel"]).shape[0])  # type: ignore
-    cnn_feat_dim = len(cnn_names) * 64
-    return max(0, input_dim - cnn_feat_dim)
-
-
-def _extract_state_mean_std(
-    normalizer_params: Any, state_obs_key: str
-) -> tuple[np.ndarray | None, np.ndarray | None]:
-    if normalizer_params is None or not state_obs_key:
-        return None, None
-    mean = _get_path(normalizer_params, "mean")
-    std = _get_path(normalizer_params, "std")
-    if mean is None or std is None:
-        return None, None
-    if isinstance(mean, Mapping):
-        mean = mean.get(state_obs_key)
-    if isinstance(std, Mapping):
-        std = std.get(state_obs_key)
-    if mean is None or std is None:
-        return None, None
-    return np.asarray(mean, dtype=np.float32), np.asarray(std, dtype=np.float32)
-
-
 if tf is not None and layers is not None:
 
     class VisionPPOPolicy(tf.keras.Model):
@@ -172,8 +120,6 @@ if tf is not None and layers is not None:
             activation: Any,
             normalise_channels: bool = True,
             state_obs_key: str = "",
-            state_mean: np.ndarray | None = None,
-            state_std: np.ndarray | None = None,
             **kwargs,
         ):
             super().__init__(**kwargs)
@@ -181,16 +127,6 @@ if tf is not None and layers is not None:
             self.pixel_obs_keys = tuple(pixel_obs_keys)
             self.normalise_channels = normalise_channels
             self.state_obs_key = state_obs_key
-            self.state_mean = (
-                tf.constant(state_mean, dtype=tf.float32)
-                if state_mean is not None
-                else None
-            )
-            self.state_std = (
-                tf.constant(state_std, dtype=tf.float32)
-                if state_std is not None
-                else None
-            )
 
             self.cnn_blocks = []
             for i, _ in enumerate(self.pixel_obs_keys):
@@ -255,10 +191,7 @@ if tf is not None and layers is not None:
                 cnn_outs.append(hidden)
 
             if self.state_obs_key:
-                state_obs = obs[self.state_obs_key]
-                if self.state_mean is not None and self.state_std is not None:
-                    state_obs = (state_obs - self.state_mean) / self.state_std
-                cnn_outs.append(state_obs)
+                cnn_outs.append(obs[self.state_obs_key])
 
             logits = self.mlp_block(tf.concat(cnn_outs, axis=-1))
             loc, _ = tf.split(logits, 2, axis=-1)
@@ -303,20 +236,15 @@ def convert_policy_to_onnx(
     pixel_obs_keys: Sequence[str] | None = None,
     state_obs_key: str = "",
     normalise_channels: bool = True,
-    normalize_state_observations: bool | None = None,
 ):
     """Converts PPO vision policy params to ONNX via TensorFlow."""
     if tf is None or tf2onnx is None or layers is None:
         raise ImportError("TensorFlow/tf2onnx is required for ONNX export.")
 
-    normalizer_params = _extract_normalizer_params(params)
     policy_params = _extract_policy_params(params)
     action_size = _infer_action_size(policy_params)
     hidden_layers = _resolve_hidden_layers(cfg, _infer_hidden_layers(policy_params))
     activation = _resolve_tf_activation(cfg)
-    state_obs_dim = _infer_state_obs_dim(policy_params)
-    if not state_obs_key and state_obs_dim > 0:
-        state_obs_key = _resolve_state_obs_key(cfg)
 
     cnn_names = sorted(
         [k for k in policy_params.keys() if k.startswith("CNN_")],
@@ -340,31 +268,6 @@ def convert_policy_to_onnx(
                 np.asarray(policy_params[f"CNN_{i}"]["Conv_0"]["kernel"]).shape[2]  # type: ignore
             )
             observation_shapes[key] = (h, w, channels)
-    else:
-        observation_shapes = dict(observation_shapes)
-
-    if normalize_state_observations is None:
-        normalize_state_observations = _resolve_normalize_observations(
-            cfg, default=False
-        )
-
-    if state_obs_key and state_obs_key not in observation_shapes:
-        state_mean, _ = _extract_state_mean_std(normalizer_params, state_obs_key)
-        if state_mean is not None:
-            observation_shapes[state_obs_key] = tuple(int(x) for x in state_mean.shape)  # type: ignore
-        elif state_obs_dim > 0:
-            observation_shapes[state_obs_key] = (state_obs_dim,)
-        else:
-            raise ValueError(
-                f"Missing observation shape for '{state_obs_key}' and state dim could not be inferred."
-            )
-
-    if normalize_state_observations:
-        state_mean, state_std = _extract_state_mean_std(
-            normalizer_params, state_obs_key
-        )
-    else:
-        state_mean, state_std = None, None
 
     tf_policy_network = VisionPPOPolicy(
         action_size=action_size,
@@ -373,8 +276,6 @@ def convert_policy_to_onnx(
         activation=activation,
         normalise_channels=normalise_channels,
         state_obs_key=state_obs_key,
-        state_mean=state_mean,
-        state_std=state_std,
     )
 
     dummy_obs = {
@@ -423,29 +324,13 @@ def make_franka_policy(
         obs_keys.append(key)
         obs_shapes[key] = (h, w, channels)
 
-    state_obs_dim = _infer_state_obs_dim(policy_params)
-    state_obs_key = ""
-    normalize_state_observations = _resolve_normalize_observations(cfg, default=False)
-    if state_obs_dim > 0:
-        state_obs_key = _resolve_state_obs_key(cfg)
-        if normalize_state_observations:
-            normalizer_params = _extract_normalizer_params(params)
-            state_mean, _ = _extract_state_mean_std(normalizer_params, state_obs_key)
-            if state_mean is not None:
-                obs_shapes[state_obs_key] = tuple(int(x) for x in state_mean.shape)  # type: ignore
-            else:
-                obs_shapes[state_obs_key] = (state_obs_dim,)  # type: ignore
-        else:
-            obs_shapes[state_obs_key] = (state_obs_dim,)  # type: ignore
-
     model_proto = convert_policy_to_onnx(
         make_policy_fn,
         params,
         cfg=cfg,
         observation_shapes=obs_shapes,
         pixel_obs_keys=obs_keys,
-        state_obs_key=state_obs_key,
+        state_obs_key="",
         normalise_channels=True,
-        normalize_state_observations=normalize_state_observations,
     )
     return model_proto.SerializeToString()

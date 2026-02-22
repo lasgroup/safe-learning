@@ -39,11 +39,6 @@ _TRAIN_DOMAIN_RANDOMIZATION = flags.DEFINE_boolean(
 _EVAL_DOMAIN_RANDOMIZATION = flags.DEFINE_boolean(
     "eval_domain_randomization", True, "Enable domain randomization for evaluation"
 )
-_NORMALIZE_OBSERVATIONS = flags.DEFINE_boolean(
-    "normalize_observations",
-    False,
-    "Whether to normalize non-pixel observations (state). Mirrors franka_online by default.",
-)
 _RENDER_WIDTH = flags.DEFINE_integer("render_width", 64, "Render width")
 _RENDER_HEIGHT = flags.DEFINE_integer("render_height", 64, "Render height")
 _USE_RASTERIZER = flags.DEFINE_boolean(
@@ -125,8 +120,6 @@ def main(argv):
         value_hidden_layer_sizes=[256, 256],
         activation=linen.relu,
         normalise_channels=True,
-        policy_obs_key="state",
-        value_obs_key="state",
     )
 
     ppo_params = manipulation_params.brax_vision_ppo_config(_BASE_CONFIG_ENV_NAME)
@@ -135,13 +128,8 @@ def main(argv):
     ppo_params.num_eval_envs = num_envs
     ppo_params.episode_length = episode_length
     ppo_params.action_repeat = 1
-    ppo_params.normalize_observations = _NORMALIZE_OBSERVATIONS.value
     del ppo_params.network_factory
     ppo_params.network_factory = network_factory
-    print(
-        "PPO normalize_observations="
-        f"{ppo_params.normalize_observations} (franka_online uses false)"
-    )
 
     times = [datetime.now()]
 

@@ -12,6 +12,13 @@ except ImportError:
     ort = None
 
 
+def _make_ort_session_options():
+    opts = ort.SessionOptions()
+    opts.intra_op_num_threads = 1
+    opts.inter_op_num_threads = 1
+    return opts
+
+
 def test_policy_to_onnx_export(num_tests: int = 5, atol: float = 1e-4):
     obs_shape = (64, 64, 1)
     action_size = 3
@@ -44,6 +51,7 @@ def test_policy_to_onnx_export(num_tests: int = 5, atol: float = 1e-4):
 
     session = ort.InferenceSession(
         model_proto.SerializeToString(),
+        sess_options=_make_ort_session_options(),
         providers=["CPUExecutionProvider"],
     )
     jax_policy = make_inference_fn((None, policy_params, None), deterministic=True)

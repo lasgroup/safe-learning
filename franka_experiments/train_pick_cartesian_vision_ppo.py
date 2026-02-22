@@ -11,6 +11,7 @@ The environment is always created with:
 
 import functools
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import brax.training.agents.ppo.train as brax_ppo_train
@@ -33,6 +34,11 @@ _NUM_TIMESTEPS = flags.DEFINE_integer(
     "num_timesteps", 7_000_000, "Total environment steps for PPO training"
 )
 _SEED = flags.DEFINE_integer("seed", 0, "PRNG seed")
+_SAVE_CHECKPOINT_PATH = flags.DEFINE_string(
+    "save_checkpoint_path",
+    "franka_experiments/checkpoints/pick_cartesian_vision_ppo",
+    "Directory to save Brax PPO checkpoints. Set empty string to disable.",
+)
 _TRAIN_DOMAIN_RANDOMIZATION = flags.DEFINE_boolean(
     "train_domain_randomization", True, "Enable domain randomization for training"
 )
@@ -111,6 +117,17 @@ def main(argv):
     del argv
 
     print(f"Using Brax PPO trainer from: {brax_ppo_train.__file__}")
+    save_checkpoint_path = None
+    if _SAVE_CHECKPOINT_PATH.value:
+        save_checkpoint_path = str(
+            Path(_SAVE_CHECKPOINT_PATH.value).expanduser().resolve()
+        )
+        Path(save_checkpoint_path).mkdir(parents=True, exist_ok=True)
+    print(
+        "Checkpoint saving: "
+        f"{save_checkpoint_path if save_checkpoint_path else 'disabled'}"
+    )
+
     train_env, episode_length = _build_env_and_cfg()
     num_envs = _NUM_ENVS.value
 
@@ -149,6 +166,7 @@ def main(argv):
             "madrona_backend": True,
             "progress_fn": progress,
             "seed": _SEED.value,
+            "save_checkpoint_path": save_checkpoint_path,
         }
     )
     train_fn = functools.partial(brax_ppo_train.train, **train_kwargs)

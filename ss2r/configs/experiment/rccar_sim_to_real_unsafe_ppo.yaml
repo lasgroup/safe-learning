@@ -2,6 +2,7 @@
 defaults:
   - override /environment: rccar_real
   - override /agent: ppo
+  - override /agent/penalizer: null
   - _self_
 
 environment:

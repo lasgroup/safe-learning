@@ -94,6 +94,7 @@ def get_train_fn(cfg, checkpoint_path, restore_checkpoint_path):
         **agent_cfg,
         **training_cfg,
         network_factory=network_factory,
+        checkpoint_logdir=checkpoint_path if cfg.training.store_checkpoint else None,
         restore_checkpoint_path=restore_checkpoint_path,
         penalizer=penalizer,
         penalizer_params=penalizer_params,

@@ -132,9 +132,7 @@ class ModelBasedEnv(envs.Env):
                     done,
                 )
 
-            backup_action, _ = self.backup_policy_fn(
-                state.obs, jax.random.PRNGKey(0)
-            )
+            backup_action, _ = self.backup_policy_fn(state.obs, jax.random.PRNGKey(0))
             pred_qr = self.qr_network.apply
             backup_qr_params = self.backup_qr_params
             pessimistic_qr_pred = pred_qr(

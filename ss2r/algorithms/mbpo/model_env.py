@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from brax import envs
 from brax.envs import base
 
+from ss2r.algorithms.mbpo.networks import make_inference_fn
 from ss2r.algorithms.sac.types import float32
 
 
@@ -45,6 +46,15 @@ class ModelBasedEnv(envs.Env):
         self.safety_filter = safety_filter
         self.initial_normalizer_params = (
             initial_normalizer_params if initial_normalizer_params is not None else {}
+        )
+        _make_policy = make_inference_fn(mbpo_network)
+        self.backup_policy_fn = _make_policy(
+            (training_state.normalizer_params, training_state.backup_policy_params),
+            deterministic=True,
+        )
+        self.backup_policy_fn_initial = _make_policy(
+            (self.initial_normalizer_params, training_state.backup_policy_params),
+            deterministic=True,
         )
 
     def reset(self, rng: jax.Array) -> base.State:
@@ -110,12 +120,8 @@ class ModelBasedEnv(envs.Env):
                     state.obs,
                     action,
                 ).mean(axis=-1)
-                backup_policy = self.policy_network.apply
-                backup_policy_params = self.backup_policy_params
-                backup_action = jnp.tanh(
-                    backup_policy(
-                        self.initial_normalizer_params, backup_policy_params, state.obs
-                    )[: self.action_size]
+                backup_action, _ = self.backup_policy_fn_initial(
+                    state.obs, jax.random.PRNGKey(0)
                 )
                 qc_backup = self.qc_network.apply(
                     self.normalizer_params,
@@ -130,12 +136,8 @@ class ModelBasedEnv(envs.Env):
                     done,
                 )
 
-            pred_backup_action = self.policy_network.apply
-            backup_policy_params = self.backup_policy_params
-            backup_action = jnp.tanh(
-                pred_backup_action(
-                    self.normalizer_params, backup_policy_params, state.obs
-                )[: self.action_size]
+            backup_action, _ = self.backup_policy_fn(
+                state.obs, jax.random.PRNGKey(0)
             )
             pred_qr = self.qr_network.apply
             backup_qr_params = self.backup_qr_params

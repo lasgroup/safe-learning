@@ -83,7 +83,8 @@ def make_losses(
         action = transitions.action
         scale = cost_scaling if safe else reward_scaling
         gamma = safety_discounting if safe else discounting
-        q_old_action = qr_network.apply(
+        q_net = qc_network if (safe and qc_network is not None) else qr_network
+        q_old_action = q_net.apply(
             normalizer_params, q_params, transitions.observation, action
         )
         key, another_key = jax.random.split(key)
@@ -101,7 +102,7 @@ def make_losses(
             next_action = parametric_action_distribution.postprocess(next_action)
             return next_action, next_log_prob
 
-        q_fn = lambda obs, action: qr_network.apply(
+        q_fn = lambda obs, action: q_net.apply(
             normalizer_params, target_q_params, obs, action
         )
         target_q = target_q_fn(
@@ -172,7 +173,6 @@ def make_losses(
         (next_obs_pred, reward_pred, cost_pred) = model_apply(
             normalizer_params, model_params, data.observation, data.action
         )
-        next_obs_pred = normalize_fn(next_obs_pred, normalizer_params)
         next_obs_pred = (
             next_obs_pred
             if isinstance(next_obs_pred, jax.Array)

@@ -179,7 +179,7 @@ def make_on_policy_training_step(
             key_alpha,
             optimizer_state=training_state.alpha_optimizer_state,
         )
-        alpha = jnp.exp(alpha_params) + min_alpha
+        alpha = jnp.exp(training_state.alpha_params) + min_alpha
         (actor_loss, aux), policy_params, policy_optimizer_state = actor_update(
             training_state.behavior_policy_params,
             training_state.normalizer_params,

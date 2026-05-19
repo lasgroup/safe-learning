@@ -112,11 +112,9 @@ class ModelBasedEnv(envs.Env):
                 ).mean(axis=-1)
                 backup_policy = self.policy_network.apply
                 backup_policy_params = self.backup_policy_params
-                backup_action = jnp.tanh(
-                    backup_policy(
-                        self.initial_normalizer_params, backup_policy_params, state.obs
-                    )[: self.action_size]
-                )
+                backup_action = backup_policy(
+                    self.initial_normalizer_params, backup_policy_params, state.obs
+                )[: self.action_size]
                 qc_backup = self.qc_network.apply(
                     self.normalizer_params,
                     self.backup_qc_params,
@@ -132,11 +130,9 @@ class ModelBasedEnv(envs.Env):
 
             pred_backup_action = self.policy_network.apply
             backup_policy_params = self.backup_policy_params
-            backup_action = jnp.tanh(
-                pred_backup_action(
-                    self.normalizer_params, backup_policy_params, state.obs
-                )[: self.action_size]
-            )
+            backup_action = pred_backup_action(
+                self.normalizer_params, backup_policy_params, state.obs
+            )[: self.action_size]
             pred_qr = self.qr_network.apply
             backup_qr_params = self.backup_qr_params
             pessimistic_qr_pred = pred_qr(
@@ -230,13 +226,13 @@ def _propagate_ensemble(
     """Propagate the ensemble predictions based on the selection method."""
     # Calculate the nominal predictions
     if ensemble_selection == "nominal":
-        # Get the average model parameters
-        avg_model_params = jax.tree_util.tree_map(
-            lambda p: jnp.mean(p, axis=0), model_params
+        vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
+        next_obs_pred, reward_pred, cost_pred = vmap_pred_fn(
+            normalizer_params, model_params, obs, action
         )
-        next_obs, reward, cost = pred_fn(
-            normalizer_params, avg_model_params, obs, action
-        )
+        next_obs = jax.tree_map(lambda x: jnp.mean(x, axis=0), next_obs_pred)
+        reward = jnp.mean(reward_pred, axis=0)
+        cost = jnp.mean(cost_pred, axis=0)
     elif ensemble_selection == "random":
         vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
         next_obs_pred, reward_pred, cost_pred = vmap_pred_fn(
@@ -247,14 +243,6 @@ def _propagate_ensemble(
         next_obs = jax.tree_map(lambda x: x[idx], next_obs_pred)
         reward = reward_pred[idx]
         cost = cost_pred[idx]
-    elif ensemble_selection == "mean":
-        vmap_pred_fn = jax.vmap(pred_fn, in_axes=(None, 0, None, None))
-        next_obs_pred, reward_pred, cost_pred = vmap_pred_fn(
-            normalizer_params, model_params, obs, action
-        )
-        next_obs = jax.tree_map(lambda x: jnp.mean(x, axis=0), next_obs_pred)
-        reward = jnp.mean(reward_pred, axis=0)
-        cost = jnp.mean(cost_pred, axis=0)
     else:
         raise ValueError(f"Unknown ensemble selection: {ensemble_selection}")
     return next_obs, reward, cost

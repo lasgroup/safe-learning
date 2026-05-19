@@ -172,6 +172,7 @@ def make_losses(
         (next_obs_pred, reward_pred, cost_pred) = model_apply(
             normalizer_params, model_params, data.observation, data.action
         )
+        next_obs_pred = normalize_fn(next_obs_pred, normalizer_params)
         next_obs_pred = (
             next_obs_pred
             if isinstance(next_obs_pred, jax.Array)

@@ -303,9 +303,11 @@ def make_on_policy_training_step(
 
         pred_backup_action = planning_env.policy_network.apply
         backup_policy_params = planning_env.backup_policy_params
-        backup_action = pred_backup_action(
-            normalizer_params, backup_policy_params, transitions.observation
-        )[..., : planning_env.action_size]
+        backup_action = jnp.tanh(
+            pred_backup_action(
+                normalizer_params, backup_policy_params, transitions.observation
+            )[..., : planning_env.action_size]
+        )
         disagreement = (
             next_obs_pred.std(axis=0).mean(-1)
             if isinstance(next_obs_pred, jax.Array)

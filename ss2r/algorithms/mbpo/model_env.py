@@ -112,9 +112,11 @@ class ModelBasedEnv(envs.Env):
                 ).mean(axis=-1)
                 backup_policy = self.policy_network.apply
                 backup_policy_params = self.backup_policy_params
-                backup_action = backup_policy(
-                    self.initial_normalizer_params, backup_policy_params, state.obs
-                )[: self.action_size]
+                backup_action = jnp.tanh(
+                    backup_policy(
+                        self.initial_normalizer_params, backup_policy_params, state.obs
+                    )[: self.action_size]
+                )
                 qc_backup = self.qc_network.apply(
                     self.normalizer_params,
                     self.backup_qc_params,
@@ -130,9 +132,11 @@ class ModelBasedEnv(envs.Env):
 
             pred_backup_action = self.policy_network.apply
             backup_policy_params = self.backup_policy_params
-            backup_action = pred_backup_action(
-                self.normalizer_params, backup_policy_params, state.obs
-            )[: self.action_size]
+            backup_action = jnp.tanh(
+                pred_backup_action(
+                    self.normalizer_params, backup_policy_params, state.obs
+                )[: self.action_size]
+            )
             pred_qr = self.qr_network.apply
             backup_qr_params = self.backup_qr_params
             pessimistic_qr_pred = pred_qr(

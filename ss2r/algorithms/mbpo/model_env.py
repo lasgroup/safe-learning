@@ -49,10 +49,6 @@ class ModelBasedEnv(envs.Env):
         )
         _make_policy = make_inference_fn(mbpo_network)
         self.backup_policy_fn = _make_policy(
-            (training_state.normalizer_params, training_state.backup_policy_params),
-            deterministic=True,
-        )
-        self.backup_policy_fn_initial = _make_policy(
             (self.initial_normalizer_params, training_state.backup_policy_params),
             deterministic=True,
         )
@@ -120,7 +116,7 @@ class ModelBasedEnv(envs.Env):
                     state.obs,
                     action,
                 ).mean(axis=-1)
-                backup_action, _ = self.backup_policy_fn_initial(
+                backup_action, _ = self.backup_policy_fn(
                     state.obs, jax.random.PRNGKey(0)
                 )
                 qc_backup = self.qc_network.apply(
